@@ -1,0 +1,54 @@
+# Full local stack: Postgres → one-shot migrations → API → web.
+#   docker compose up --build      then open http://localhost:5173
+name: cascade
+
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: cascade
+      POSTGRES_PASSWORD: cascade
+      POSTGRES_DB: cascade
+    ports: ["5432:5432"]
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./scripts/db-init.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U cascade -d cascade"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+
+  migrate:
+    build: ./backend
+    command: ["alembic", "upgrade", "head"]
+    environment: &backend-env
+      DATABASE_URL: postgresql+psycopg://cascade:cascade@db:5432/cascade
+      ENVIRONMENT: local
+      LLM_PROVIDER: ${LLM_PROVIDER:-rules}
+      GEMINI_API_KEY: ${GEMINI_API_KEY:-}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      DEMO_MODE: "true"
+      CORS_ORIGINS: http://localhost:5173
+    depends_on:
+      db: { condition: service_healthy }
+    restart: "no"
+
+  backend:
+    build: ./backend
+    environment: *backend-env
+    ports: ["8000:8000"]
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+
+  frontend:
+    build: ./frontend
+    environment:
+      BACKEND_URL: http://backend:8000
+      PORT: "8080"
+    ports: ["5173:8080"]
+    depends_on:
+      backend: { condition: service_healthy }
+
+volumes:
+  pgdata:

@@ -21,7 +21,8 @@ services:
 
   migrate:
     build: ./backend
-    command: ["alembic", "upgrade", "head"]
+    # Migrate, then seed NovaCart only into an empty DB (restarts keep your demo history).
+    command: ["sh", "-c", "alembic upgrade head && python -m app.seed --if-empty"]
     environment: &backend-env
       DATABASE_URL: postgresql+psycopg://cascade:cascade@db:5432/cascade
       ENVIRONMENT: local

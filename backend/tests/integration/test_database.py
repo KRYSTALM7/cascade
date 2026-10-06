@@ -63,3 +63,17 @@ def test_migrations_upgrade_and_downgrade_round_trip(db_engine: Engine, test_db_
     assert remaining == 0
 
     command.upgrade(cfg, "head")  # leave the DB at head for later tests
+
+
+def test_models_and_migrations_have_no_drift(migrated_engine: Engine) -> None:
+    from alembic.autogenerate import compare_metadata
+    from alembic.migration import MigrationContext
+
+    from app.models import Base
+
+    with migrated_engine.connect() as conn:
+        ctx = MigrationContext.configure(conn, opts={"compare_type": True})
+        diff = compare_metadata(ctx, Base.metadata)
+    assert diff == [], (
+        f"models differ from migrations — run alembic revision --autogenerate: {diff}"
+    )

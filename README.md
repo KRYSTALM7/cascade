@@ -12,7 +12,7 @@ Built for AI Builder Cup 2026. Design: [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md).
 
 ```bash
 cp .env.example .env          # optional: set LLM_PROVIDER=gemini + GEMINI_API_KEY
-make up                       # db → migrations → api → web
+make up                       # db → migrations → seed → api → web
 open http://localhost:5173    # API docs: http://localhost:8000/docs
 ```
 
@@ -49,5 +49,6 @@ docs/      blueprint, edge-case matrix, demo script
 | Phase | Scope | State |
 |---|---|---|
 | 1 | Repo, Docker, backend skeleton, DB, migrations, frontend shell | ✅ |
-| 2 | Domain model + NovaCart seed | next |
-| 3–10 | Consequence engine → risk/policy → Gemini → APIs → UI → execution → edge cases → deploy | planned |
+| 2 | Domain model (event → reaction schema) + NovaCart seed + read API | ✅ |
+| 3 | Tool simulators + consequence engine → Blast Radius | next |
+| 4–10 | Risk/policy → Gemini → APIs → UI → execution → edge cases → deploy | planned |

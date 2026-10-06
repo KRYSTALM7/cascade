@@ -9,7 +9,7 @@ UV       := cd $(BACKEND) && uv run
 NPM      := cd $(FRONTEND) && npm
 
 .DEFAULT_GOAL := help
-.PHONY: help install up down logs db-up migrate dev-backend dev-frontend \
+.PHONY: help install up down logs db-up migrate seed dev-backend dev-frontend \
         test test-backend test-frontend lint lint-backend lint-frontend fmt typecheck check
 
 help: ## Show this help
@@ -36,6 +36,9 @@ db-up: ## Start only Postgres (for running backend/tests on the host)
 # ---- Host development ------------------------------------------------------
 migrate: ## Apply migrations to DATABASE_URL
 	$(UV) alembic upgrade head
+
+seed: ## WIPE and reload the NovaCart demo dataset into DATABASE_URL
+	$(UV) python -m app.seed
 
 dev-backend: ## API with auto-reload on :8000
 	$(UV) uvicorn app.main:app --reload --port 8000

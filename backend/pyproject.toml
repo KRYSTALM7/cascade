@@ -60,7 +60,7 @@ addopts = "-ra --strict-markers"
 markers = [
     "db: requires a reachable PostgreSQL (TEST_DATABASE_URL)",
 ]
-filterwarnings = ["error::DeprecationWarning:app.*"]
+filterwarnings = ["error::DeprecationWarning:app.*", "error::sqlalchemy.exc.SAWarning"]
 
 [tool.ruff.lint.isort]
 known-first-party = ["app"]

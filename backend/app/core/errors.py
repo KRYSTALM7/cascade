@@ -30,6 +30,8 @@ class ErrorCode(StrEnum):
     INTERNAL_ERROR = "INTERNAL_ERROR"
     SERVICE_UNAVAILABLE = "SERVICE_UNAVAILABLE"
     # Domain codes are added per phase; keep them here so they stay unique and greppable.
+    AGENT_NOT_FOUND = "AGENT_NOT_FOUND"
+    ORDER_NOT_FOUND = "ORDER_NOT_FOUND"
 
 
 class CascadeError(Exception):

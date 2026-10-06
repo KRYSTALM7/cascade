@@ -15,9 +15,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
 from sqlalchemy.exc import OperationalError
+from sqlalchemy.orm import Session
 
 from app.core.config import Environment, Settings
+from app.db.session import get_db
 from app.main import create_app
+from app.seed.novacart import reset_and_seed
 
 DEFAULT_TEST_DB = "postgresql+psycopg://cascade:cascade@localhost:5432/cascade_test"
 
@@ -80,3 +83,50 @@ def db_engine(test_db_url: str) -> Iterator[Engine]:
         pytest.skip(f"test database unreachable at {test_db_url} (run `make db-up`)")
     yield engine
     engine.dispose()
+
+
+@pytest.fixture(scope="session")
+def migrated_engine(db_engine: Engine, test_db_url: str) -> Engine:
+    """Schema at head, once per test session."""
+    from pathlib import Path
+
+    from alembic import command
+    from alembic.config import Config
+
+    cfg = Config(str(Path(__file__).resolve().parents[1] / "alembic.ini"))
+    cfg.attributes["database_url"] = test_db_url
+    cfg.attributes["configure_logger"] = False
+    command.upgrade(cfg, "head")
+    return db_engine
+
+
+@pytest.fixture
+def db_session(migrated_engine: Engine) -> Iterator[Session]:
+    """Seeded NovaCart inside an outer transaction that is ROLLED BACK after the test, so every
+    test starts from identical state regardless of order. Code under test may commit freely:
+    commits release SAVEPOINTs, never the outer transaction."""
+    connection = migrated_engine.connect()
+    outer = connection.begin()
+    session = Session(bind=connection, join_transaction_mode="create_savepoint")
+    try:
+        reset_and_seed(session)
+        session.flush()
+        session.expire_all()  # behave like a fresh request session: reload with ORDER BY
+        yield session
+    finally:
+        session.close()
+        outer.rollback()
+        connection.close()
+
+
+@pytest.fixture
+def db_client(app: FastAPI, db_session: Session) -> Iterator[TestClient]:
+    """API client whose requests all share the seeded, rolled-back test session."""
+
+    def _override() -> Iterator[Session]:
+        yield db_session
+
+    app.dependency_overrides[get_db] = _override
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()

@@ -10,7 +10,7 @@ NPM      := cd $(FRONTEND) && npm
 
 .DEFAULT_GOAL := help
 .PHONY: help install up down logs db-up migrate seed dev-backend dev-frontend \
-        test test-backend test-frontend lint lint-backend lint-frontend fmt typecheck check
+        test test-backend test-frontend e2e lint lint-backend lint-frontend fmt typecheck check
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[36m%-16s\033[0m %s\n",$$1,$$2}'
@@ -52,6 +52,9 @@ test-backend: ## Backend tests (DB tests need TEST_DATABASE_URL reachable)
 
 test-frontend: ## Frontend unit/component tests
 	$(NPM) test
+
+e2e: ## Playwright demo flows (starts/reuses :8000 + :5173; RESETS the demo database)
+	$(NPM) run e2e
 
 test: test-backend test-frontend ## All tests
 

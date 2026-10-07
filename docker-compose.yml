@@ -9,7 +9,7 @@ services:
       POSTGRES_USER: cascade
       POSTGRES_PASSWORD: cascade
       POSTGRES_DB: cascade
-    ports: ["5432:5432"]
+    ports: ["${DB_PORT:-5432}:5432"]
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./scripts/db-init.sql:/docker-entrypoint-initdb.d/10-test-db.sql:ro
@@ -28,7 +28,7 @@ services:
       ENVIRONMENT: local
       LLM_PROVIDER: ${LLM_PROVIDER:-rules}
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
-      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-2.5-flash}
+      GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       DEMO_MODE: "true"
       CORS_ORIGINS: http://localhost:5173
     depends_on:

@@ -263,6 +263,7 @@ class ReactionSeed:
     required: bool = True
     priority: int = 100
     description: str = ""
+    enabled: bool = True
 
 
 REACTIONS: list[ReactionSeed] = [
@@ -448,6 +449,19 @@ REACTIONS: list[ReactionSeed] = [
         required=False,
         priority=10,
         description="CRM opens a case whenever a payment is reversed.",
+    ),
+    # Escape Room "unauthorized downstream": CRM is NOT permitted to issue compensation. Seeded
+    # DISABLED so it never affects the demo; the scenario enables it for one simulation.
+    ReactionSeed(
+        "crm.goodwill_on_vip_cancel",
+        "crm",
+        E.ORDER_CANCELLED,
+        "issue_compensation",
+        {"order_id": "$event.order_id", "percentage": "10", "reason": "VIP_GOODWILL"},
+        C.CUSTOMER_IS_VIP,
+        priority=60,
+        description="(Escape Room) CRM tries to grant VIP goodwill credit it is not allowed to.",
+        enabled=False,
     ),
 ]
 

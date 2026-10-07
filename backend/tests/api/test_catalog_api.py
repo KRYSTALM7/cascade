@@ -37,7 +37,7 @@ def test_tools_and_reactions_are_listed(db_client: TestClient) -> None:
     assert len(tools) == 14
     assert {t["id"]: t["reversibility"] for t in tools}["cancel_order"] == "NONE"
     reactions = db_client.get("/api/reactions").json()
-    assert len(reactions) == 14
+    assert len(reactions) == 15  # incl. the disabled Escape Room rule
     assert reactions[0]["event_type"] <= reactions[-1]["event_type"]  # deterministic order
 
 

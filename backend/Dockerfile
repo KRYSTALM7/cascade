@@ -21,6 +21,7 @@ COPY --from=deps /opt/venv /opt/venv
 COPY alembic.ini ./
 COPY alembic ./alembic
 COPY app ./app
+COPY policy ./policy
 USER cascade
 ENV PORT=8000
 EXPOSE 8000

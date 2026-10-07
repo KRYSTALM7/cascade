@@ -6,12 +6,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
-from app.api.routes import catalog, health, orders
+from app.api.deps import system_clock
+from app.api.routes import actions, audit, catalog, escape_room, health, orders, policy
 from app.core.config import Settings, get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
 from app.core.middleware import RequestContextMiddleware
 from app.core.request_context import REQUEST_ID_HEADER
+from app.domain.policy.loader import load_policy
+from app.llm.factory import build_provider
 
 
 def create_app(settings: Settings | None = None) -> FastAPI:
@@ -23,6 +26,11 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         version=__version__,
         description="Pre-execution consequence intelligence for AI agents.",
     )
+    app.state.settings = settings
+    # Fail fast: a malformed policy must refuse to boot, never fail at request time.
+    app.state.policy = load_policy(settings.policy_path)
+    app.state.llm = build_provider(settings)
+    app.state.clock = system_clock
 
     app.add_middleware(
         CORSMiddleware,
@@ -38,6 +46,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(health.router)
     app.include_router(catalog.router)
     app.include_router(orders.router)
+    app.include_router(policy.router)
+    app.include_router(actions.router)
+    app.include_router(audit.router)
+    app.include_router(escape_room.router)
     return app
 
 

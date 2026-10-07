@@ -4,10 +4,13 @@ from __future__ import annotations
 
 from enum import StrEnum
 from functools import lru_cache
+from pathlib import Path
 from typing import Annotated, Self
 
 from pydantic import Field, SecretStr, field_validator, model_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
+
+BACKEND_ROOT = Path(__file__).resolve().parents[2]
 
 
 class Environment(StrEnum):
@@ -48,10 +51,13 @@ class Settings(BaseSettings):
 
     llm_provider: LLMProviderName = LLMProviderName.RULES
     gemini_api_key: SecretStr | None = None
-    gemini_model: str = "gemini-2.5-flash"
+    gemini_model: str = "gemini-3.8-flash"
     llm_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
 
     demo_mode: bool = False
+    policy_path: Path = BACKEND_ROOT / "policy" / "policy.yaml"
+    # Tests/demo only: execution of this tool id raises (e.g. "send_customer_notification").
+    fault_injection: str | None = None
 
     @field_validator("database_url")
     @classmethod

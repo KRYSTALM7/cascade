@@ -1,0 +1,47 @@
+# Cascade approval & risk policy. The ONLY place thresholds, weights and limits live.
+# Validated by app/domain/policy/model.py at startup (a bad file refuses to boot).
+# Money, weights and breakpoints are QUOTED strings: they become exact Decimals, never floats.
+
+version: "2026-10-07.1"
+currency: INR
+
+# Outflow at or below this is autonomous (inclusive: exactly 2000.00 does not need a human).
+auto_approve_limit: "2000.00"
+# Refund/compensation outflow above this raises the risk level to at least HIGH.
+high_value_refund: "25000.00"
+# A pending approval expires after this many minutes (checked lazily on access).
+approval_expiry_minutes: 30
+
+cascade:
+  max_depth: 6
+  max_nodes: 50
+
+risk:
+  weights:                     # must sum to exactly 1
+    financial: "0.35"
+    irreversibility: "0.20"
+    downstream: "0.15"
+    customer: "0.20"
+    data: "0.10"
+  financial_breakpoints:       # |net money out| in INR -> 0..100, piecewise-linear, clamped
+    - { amount: "0", score: "0" }
+    - { amount: "2000", score: "30" }
+    - { amount: "25000", score: "70" }
+    - { amount: "100000", score: "100" }
+  irreversibility: { FULL: 0, PARTIAL: 50, NONE: 100 }
+  downstream_per_agent: 25     # per distinct agent other than the proposer, capped at 100
+  customer_impact: { NONE: 0, LOW: 20, MEDIUM: 50, HIGH: 80, SEVERE: 100 }
+  data_sensitivity: { NONE: 0, INTERNAL: 20, PII: 60, BULK_PII: 100 }
+  levels:                      # lower bound of each band; below `medium` is LOW
+    medium: 35
+    high: 60
+    critical: 80
+  floors:                      # rules can raise the level, never lower it
+    high_value_outflow: HIGH
+    cascade_limit: HIGH
+
+approval:
+  # A human must approve when ANY of these hold (see domain/policy/engine.py for the order).
+  min_level: HIGH                       # risk level at or above this
+  irreversible_min_level: MEDIUM        # whole cascade irreversible (NONE) and level at or above this
+  bulk_pii_requires_approval: true      # any step touching BULK_PII

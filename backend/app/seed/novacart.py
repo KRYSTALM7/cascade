@@ -59,6 +59,7 @@ def reset_and_seed(session: Session) -> dict[str, int]:
             param_mapping=r.param_mapping,
             required=r.required,
             priority=r.priority,
+            enabled=r.enabled,
             description=r.description,
         )
         for r in data.REACTIONS

@@ -62,6 +62,9 @@ class Action(VersionedMixin, TimestampMixin, Base):
     state_fingerprint: Mapped[str | None] = mapped_column(String(64))
     parent_action_id: Mapped[uuid.UUID | None] = mapped_column(ForeignKey("actions.id"))
     clarification: Mapped[dict[str, Any] | None] = mapped_column(JSON)
+    current_report_id: Mapped[uuid.UUID | None] = mapped_column()
+    # Latest narrative shown with the report: {summary, bullets, source}. Never a decision input.
+    explanation: Mapped[dict[str, Any] | None] = mapped_column(JSON)
 
     reports: Mapped[list[ConsequenceReport]] = relationship(
         back_populates="action", order_by="ConsequenceReport.created_at"

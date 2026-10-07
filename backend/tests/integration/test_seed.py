@@ -69,10 +69,16 @@ def test_inventory_reserved_matches_open_order_holds(db_session: Session) -> Non
 
 
 def test_every_reaction_rule_is_executable_by_its_agent(db_session: Session) -> None:
-    """A reaction whose agent lacks permission for its tool would BLOCK every happy path."""
+    """An ENABLED reaction whose agent lacks permission would BLOCK every happy path. The only
+    exception is the Escape Room rule, which is seeded disabled and toggled by its scenario."""
     permitted = _permissions(db_session)
-    for rule in db_session.scalars(select(AgentReaction)):
-        assert (rule.agent_id, rule.tool_id) in permitted, rule.id
+    rules = list(db_session.scalars(select(AgentReaction)))
+    for rule in rules:
+        if rule.enabled:
+            assert (rule.agent_id, rule.tool_id) in permitted, rule.id
+    unauthorized = [r.id for r in rules if (r.agent_id, r.tool_id) not in permitted]
+    assert unauthorized == ["crm.goodwill_on_vip_cancel"]
+    assert not db_session.get(AgentReaction, "crm.goodwill_on_vip_cancel").enabled  # type: ignore[union-attr]
 
 
 def test_reaction_parameter_mappings_only_reference_event_fields(db_session: Session) -> None:

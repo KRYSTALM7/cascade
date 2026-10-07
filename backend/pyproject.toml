@@ -59,6 +59,7 @@ testpaths = ["tests"]
 addopts = "-ra --strict-markers"
 markers = [
     "db: requires a reachable PostgreSQL (TEST_DATABASE_URL)",
+    "live: calls the real Gemini API (skipped unless GEMINI_API_KEY is set)",
 ]
 filterwarnings = ["error::DeprecationWarning:app.*", "error::sqlalchemy.exc.SAWarning"]
 

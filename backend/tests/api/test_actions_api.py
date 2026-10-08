@@ -723,5 +723,5 @@ def test_demo_reset_only_in_demo_mode(api: TestClient, app: FastAPI, db_session:
     assert error(api.post("/api/demo/reset"), 403) == "DEMO_MODE_DISABLED"
     app.state.settings = make_settings(demo_mode=True)
     body = ok(api.post("/api/demo/reset"))
-    assert body["seeded"]["orders"] == 10
+    assert body["seeded"]["orders"] == 11
     assert db_session.scalar(select(func.count()).select_from(Action)) == 0

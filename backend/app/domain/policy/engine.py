@@ -12,7 +12,7 @@ from app.domain.enums import DataSensitivity, Decision, Reversibility, UserRole
 from app.domain.money import format_inr
 from app.domain.policy.model import Policy, level_at_least
 from app.domain.policy.reasons import PolicyReason, Severity, render
-from app.domain.risk.scorer import RiskAssessment
+from app.domain.risk.scorer import DirectAssessment, RiskAssessment, score_report
 
 
 class DecisionResult(BaseModel):
@@ -109,6 +109,20 @@ def decide(report: ConsequenceReport, risk: RiskAssessment, policy: Policy) -> D
                 level=risk.level.value,
             )
         ],
+    )
+
+
+def assess_direct(report: ConsequenceReport, policy: Policy) -> DirectAssessment:
+    """Score and decide the proposed action as if no agent reacted to it (same engines, same
+    policy). The gap between this and the full decision is what the cascade adds."""
+    direct = report.direct_view()
+    risk = score_report(direct, policy)
+    result = decide(direct, risk, policy)
+    return DirectAssessment(
+        score=risk.score,
+        level=risk.level,
+        decision=result.decision,
+        reasons=[r.code for r in result.reasons if r.severity is not Severity.INFO],
     )
 
 

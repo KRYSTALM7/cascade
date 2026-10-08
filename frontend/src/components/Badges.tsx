@@ -27,6 +27,7 @@ const STATUS_TONE: Partial<Record<ActionStatus, string>> = {
   REJECTED: "bg-rose-500/10 text-rose-300 ring-rose-500/30",
   FAILED: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
   STALE: "bg-orange-500/15 text-orange-300 ring-orange-500/40",
+  EXPIRED: "bg-orange-500/15 text-orange-300 ring-orange-500/40",
   PARTIALLY_EXECUTED: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
 };
 

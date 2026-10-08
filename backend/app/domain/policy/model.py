@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import hashlib
+import json
 from decimal import Decimal
 from itertools import pairwise
 from typing import Annotated, Any, Self
@@ -138,3 +140,9 @@ class Policy(_Strict):
     cascade: CascadeConfig
     risk: RiskConfig
     approval: ApprovalConfig
+
+    def fingerprint(self) -> str:
+        """SHA-256 of the canonical policy content. An approval is bound to the policy it was
+        decided under: execution compares this, not only the human-maintained `version`."""
+        canonical = json.dumps(self.model_dump(mode="json"), sort_keys=True, separators=(",", ":"))
+        return hashlib.sha256(canonical.encode()).hexdigest()

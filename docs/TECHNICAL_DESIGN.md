@@ -119,7 +119,7 @@ Further principles visible in the implementation:
 flowchart TB
     subgraph FE["frontend/ (React SPA)"]
         PAGES["pages: Simulate · Dashboard · Agents · EscapeRoom · Audit"]
-        COMP["components: ConsequenceGraph · BlastRadius · RiskPanel · DecisionBar · WhatIfPanel · ClarificationPrompt · OrderState"]
+        COMP["components: Landing · FlowStepper · BlastRadius · ConsequenceGraph · RiskPanel · ApprovalGate · Execution · WhatIfPanel · TechnicalDetails · ClarificationPrompt · OrderState"]
         APIC["api/client.ts · endpoints.ts"]
     end
 
@@ -334,10 +334,12 @@ Core concepts:
 
 | Concept | Implementation |
 |---|---|
-| **Node** | "Agent X calls tool T with params P". `NodeOut` records depth, parent, `trigger_type` (ROOT / AGENT_REACTION), `trigger_event`, `rule_id`, `rule_version`, `required`, `status`, `status_code`, `status_message`, effect characteristics, changes, creations, money and events. |
+| **Node** | "Agent X calls tool T with params P". `NodeOut` records depth, parent, `trigger_type` (ROOT / AGENT_REACTION), `trigger_event`, `rule_id`, `rule_version`, `trigger_condition` and `trigger_reason` (the rule's condition and declared purpose), `authorization` (that node's own check: granted, or the denial code and message), `required`, `status`, `status_code`, `status_message`, effect characteristics, changes, creations, money and events. |
 | **Node status** | `WILL_EXECUTE`, `BLOCKED` (authorization or configuration), `WOULD_FAIL` (parameters or preconditions against simulated state), `SKIPPED_LIMIT` (beyond depth or node limits). |
 | **Edge** | `TRIGGER` (event → rule → child), `DUPLICATE` (same agent/tool/params already in the graph; runs once), `CYCLE` (duplicate that is also an ancestor; loop cut). Each edge carries the event and the rule `id@version`. |
-| **Report** | Nodes, edges, Blast Radius, fingerprint, reads, `execution_order`, `blocking` and `warnings` reasons, `limit_reached`, `cycle_detected`, `engine_version = "cascade-engine/1"`. |
+| **Report** | Nodes, edges, Blast Radius, `direct_effect` (the Blast Radius of the root node alone), fingerprint, reads, `config` (§24), `execution_order`, `blocking` and `warnings` reasons, `limit_reached`, `cycle_detected`, `engine_version = "cascade-engine/1"`. |
+
+The conceptual flow for every downstream node is explicit in the data: **ToolEffect → event → reaction rule → agent triggered → that agent's tool proposal → that agent's authorization → ToolSimulator**. A downstream agent never inherits the proposer's permission. For example, `customer-support` cannot call `issue_refund`, yet in the hidden cascade (HID-*) Finance's refund node is authorized under Finance's own permission. Revoking that permission blocks the action at the Finance node while the root stays authorized (HID-05).
 
 Per-node evaluation (`_run`):
 
@@ -426,6 +428,7 @@ Hero graph in BFS order (ENG-01): `n0` cancel → `n1` finance refund ₹84,500.
 | `agents_affected` / `agent_count` | Distinct agents of executing *reaction* nodes, minus the proposer |
 | `downstream_actions` | Number of executing `AGENT_REACTION` nodes |
 | `records_affected` / `record_count` | Distinct `type:id` changed, plus one entry per created record |
+| `systems_affected` | Distinct resource types changed or created (order, payment, refund, notification, …) |
 | `money_out`, `money_in`, `net_money_out` | Exact `Decimal` sums of itemised money |
 | `customer_impact`, `data_sensitivity` | Maximum over executing nodes (enum order) |
 | `reversibility` | All FULL (or nothing executing) → FULL. All NONE → NONE. Otherwise PARTIAL |
@@ -435,6 +438,8 @@ Hero graph in BFS order (ENG-01): `n0` cancel → `n1` finance refund ₹84,500.
 *Documented* (PROGRESS, Phase 3): agent and downstream counts include only `WILL_EXECUTE` reaction nodes, and the proposer is excluded. Aggregate reversibility follows the three-way rule above.
 
 For the hero: ₹84,500.00 out, agents `crm`, `finance`, `inventory` (3), 5 downstream actions, PARTIAL.
+
+`report.direct_effect` applies the same function to the root node alone. `domain/policy/engine.py::assess_direct` scores and decides that root-only view (`report.direct_view()`) with the same scorer, policy and decision rules, and the service stores the result as `risk.direct`. It is shown for contrast ("what a per-tool permission check sees") and is never an input to the decision. For the hidden cascade (ORD-10550, laptops 2→1), the root alone is ₹0.00, FULL, **10 LOW, AUTO_APPROVED**, while the full cascade is ₹72,000.00, PARTIAL, **68 HIGH, APPROVAL_REQUIRED** (HID-02, HID-08).
 
 ## 14. Policy Engine
 
@@ -603,6 +608,7 @@ ORD-10482 example (API-06, RISK-05): `issue_compensation` at 20% gives ₹16,900
 - **Idempotency.** Repeating the same decision returns the current action (APR-04). Parallel duplicate approvals produce exactly one `APPROVED` audit row (ESC-06).
 - **Denials** are audited as `APPROVAL_DENIED` with the code and return `403`.
 - **No carry-over.** When a `STALE` action is re-simulated, its approval request resets to `PENDING` with a new expiry and the decision fields cleared (`outcomes.py`).
+- **Binding.** The `APPROVED` (and `REJECTED`) audit entry records `decided_against`: the state fingerprint, policy version and fingerprint, and the rules and catalog fingerprints of the report the approver saw (CFG-03).
 
 ## 23. Execution Model
 
@@ -625,9 +631,9 @@ sequenceDiagram
     ES->>DB: lock_rows(report.reads), sorted (type, id), FOR UPDATE
     ES->>ES: session.expire_all()
     ES->>OC: compute(action), fresh snapshot under locks
-    alt fingerprint ≠ OR graph shape ≠ OR fresh report blocked
+    alt state, policy, rule or tool-config fingerprint ≠, graph shape ≠ or now blocked
         ES->>DB: status STALE + audit STALE_STATE_DETECTED (changed_rows)
-        ES-->>Op: 409 STALE_STATE, nothing applied
+        ES-->>Op: 409 STALE_STATE / STALE_POLICY_VERSION / STALE_REACTION_RULE_VERSION / STALE_TOOL_CONFIG, nothing applied
     else unchanged
         ES->>DB: SAVEPOINT outer
         loop node in execution_order (topological)
@@ -659,13 +665,19 @@ Details:
 
 ## 24. Revalidation and Stale-State Detection
 
-`ExecutionService.execute` marks the action stale when **any** of these hold:
+An approval is bound to the business state **and** the configuration the preview depended on. The engine records that configuration in `report.config`. `reaction_rules` lists every rule consulted for an emitted event, fired or not, with its version and a digest of its behavioural fields. `rules_fingerprint` hashes that list, and `catalog_fingerprint` hashes the agent, tool and permission rows the authorization checks read. Names and descriptions are excluded. Each risk assessment stores `policy_fingerprint`, a hash of the whole policy content, so an edit that keeps the `version` label is still detected (CFG-01, CFG-02). The `APPROVED` audit entry records all of these as `decided_against` (CFG-03).
 
-1. `fresh.fingerprint != stored.fingerprint`: a row the cascade read has a different version, or a previously missing row now exists.
-2. `graph_shape(fresh) != graph_shape(stored)`: the list of `(agent, tool, canonical params, status)` per node differs. This catches catalog-level changes, such as a disabled agent or a rule change, that row versions alone would not.
-3. `fresh.is_blocked`: the action would now be refused.
+`services/execution.py::stale_reasons(stored, fresh)` keeps the existing lock → re-simulate → fingerprint flow and checks, in order:
 
-On staleness the action goes to `STALE`, `STALE_STATE_DETECTED` is audited with both fingerprints, `changed_rows` and any new blocking codes, the transaction commits, and the API returns `409 STALE_STATE` with `details.changed_rows`. Nothing is applied.
+| # | Check | Code |
+|---|---|---|
+| 1 | `fresh.fingerprint != stored.fingerprint`: a row the cascade read has a different version, or a previously missing row now exists | `STALE_STATE` |
+| 2 | Policy version or `policy_fingerprint` differs | `STALE_POLICY_VERSION` |
+| 3 | `rules_fingerprint` differs (or a report has no config) | `STALE_REACTION_RULE_VERSION` |
+| 4 | `catalog_fingerprint` differs | `STALE_TOOL_CONFIG` |
+| 5 | None of the above, but the graph shape `(agent, tool, canonical params, status)` differs or the fresh report is blocked | `STALE_STATE` |
+
+On staleness the action goes to `STALE` and `STALE_STATE_DETECTED` is audited with `stale_reasons`, both fingerprints, `changed_rows`, `changed_rules`, the approved and current policy versions, and any new blocking codes. The transaction commits, and the API returns `409` with the first reason as the error code and every reason in `details.stale_reasons`. Nothing is applied (HID-11..13, CFG-06).
 
 Recovery is explicit. `POST /api/actions/simulate {action_id}` on a `STALE` action re-simulates (`STALE → SIMULATED → decision`). If approval is required again, the approval request resets to `PENDING`. A previous approval never covers a new state (CON-02, CON-03).
 
@@ -820,7 +832,8 @@ Request models use `extra="forbid"` and bounded lengths, and idempotency keys mu
 | **Error leakage** | Unhandled exceptions → `500 INTERNAL_ERROR` without internals; DB driver errors are not leaked from `/readyz` | INF-05, INF-06 |
 | **Audit** | Insert-only at the application level, with request ids | §29 |
 | **Containers** | Backend image runs as a non-root user (uid 10001) with no secrets baked in; the frontend image is stock `nginx:1.27-alpine` serving static files | `backend/Dockerfile`, `frontend/Dockerfile` |
-| **Demo controls** | `DEMO_MODE` gates `/api/demo/reset` and the Escape Room runner (`403 DEMO_MODE_DISABLED` otherwise) | API-14, ESC-05 |
+| **Demo controls** | `DEMO_MODE` gates `/api/demo/reset` and the Escape Room runner (`403 DEMO_MODE_DISABLED` otherwise). `/healthz` reports `demo_mode`, the UI shows a "not production authentication" banner, and the API logs a warning at startup. `PUBLIC_MODE` (default on when `ENVIRONMENT=production`) refuses reset and Escape Room runs with 403 `PUBLIC_MODE_RESTRICTED` unless the presenter sends `X-Demo-Admin-Token` (constant-time compare), and disables `/docs` and `/openapi.json` | API-14, ESC-05, UX-05, PUB-01..10 |
+| **LLM cost** | Gemini is opt-in (`LLM_PROVIDER=gemini`) and always built behind a per-process budget (`LLM_CALL_LIMIT` per `LLM_CALL_WINDOW_SECONDS`); beyond it the deterministic rules provider answers and is recorded as the parser | LLMB-01..05 |
 
 **Demo authentication limitations.** `X-User-Id` is an assertion, not a credential: any client can claim any seeded user. GET endpoints, including actions, orders, audit and users, are unauthenticated. This is acceptable only for the seeded demo. Production use requires real authentication (OIDC is on the post-MVP list) and authorization on reads. `docs/DEPLOY.md` notes that the simplest Cloud Run setup is a public API with `DEMO_MODE=true` and seeded demo users only.
 
@@ -866,10 +879,12 @@ The source of truth is [`EDGE_CASES.md`](EDGE_CASES.md). Every row there has a t
 | EXE-02 | Optional step fails | Exception in step savepoint | Step and descendants rolled back or skipped | `PARTIALLY_EXECUTED` with steps | Non-critical side effects don't undo core work |
 | EXE-04 | Duplicate or parallel execute | Action row lock + status | Existing result returned | Same response | Nothing applied twice |
 | INF-06 | Database down | `/readyz` ping | `503 SERVICE_UNAVAILABLE` | Header shows backend not ready | No driver details leaked |
+| HID-05 | Downstream agent lacks its own permission while the root is authorized | `_authorize` on the downstream node | Node `BLOCKED · DOWNSTREAM_NOT_PERMITTED`; root still granted; action `BLOCKED` | Graph and "Why it happens" show the denial on that node | Permission is never inherited along a cascade |
+| HID-11/12, CFG-06 | Policy, reaction rule or tool configuration changed after approval | `stale_reasons` under locks | `STALE`, nothing applied | `409 STALE_POLICY_VERSION` / `STALE_REACTION_RULE_VERSION` / `STALE_TOOL_CONFIG` | An approval covers the rules it was decided under, not only the data |
 
 ## 36. Testing Architecture
 
-Final gate (PROGRESS, Phase 10): **311 backend tests passed** (+1 opt-in live Gemini test skipped), **34 frontend tests**, **7 Playwright flows**. ruff, ruff format and mypy `--strict` (app and tests), eslint `--max-warnings=0`, tsc and build are all clean.
+Current gate (PROGRESS, final sprint): **343 backend tests passed** (+1 opt-in live Gemini test skipped), **78 frontend tests**, **12 Playwright flows**. ruff, ruff format and mypy `--strict` (app and tests), eslint `--max-warnings=0`, tsc and build are all clean.
 
 | Layer | Location | What it covers |
 |---|---|---|
@@ -1132,11 +1147,11 @@ Not recorded. Architectural analysis: executing the stored report directly would
 ### D15. State fingerprints over rows read
 
 #### Decision
-SHA-256 over the sorted `(type, id, version)` of every versioned row read during simulation, plus a graph-shape comparison and a blocked check.
+SHA-256 over the sorted `(type, id, version)` of every versioned row read during simulation, plus configuration fingerprints (policy content, consulted reaction rules, checked agent/tool/permission rows), a graph-shape comparison and a blocked check.
 #### Why
 Documented in BLUEPRINT §H and the PROGRESS Phase 3 and Phase 6 notes.
 #### Consequence
-No false staleness from unrelated writes (ENG-09). Catalog changes are caught through graph shape.
+No false staleness from unrelated writes or unrelated configuration (ENG-09, CFG-01). Policy, rule and permission changes are reported with their own `STALE_*` codes (§24).
 #### Alternative considered
 Not recorded.
 

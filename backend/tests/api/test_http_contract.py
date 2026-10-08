@@ -64,7 +64,12 @@ def _assert_envelope(body: dict[str, object], code: str) -> dict[str, object]:
 def test_healthz_reports_ok_and_version(client: TestClient) -> None:
     response = client.get("/healthz")
     assert response.status_code == 200
-    assert response.json() == {"status": "ok", "version": "0.1.0"}
+    assert response.json() == {
+        "status": "ok",
+        "version": "0.1.0",
+        "demo_mode": False,
+        "public_mode": False,
+    }
 
 
 def test_every_response_gets_a_request_id(client: TestClient) -> None:

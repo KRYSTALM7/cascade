@@ -9,7 +9,7 @@ from fastapi import APIRouter, Query
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import select
 
-from app.api.deps import AppSettings, DbSession
+from app.api.deps import AppSettings, DbSession, PrivateDemo
 from app.core.errors import CascadeError, ErrorCode
 from app.domain.enums import UserRole
 from app.models import User
@@ -61,7 +61,7 @@ class ResetOut(BaseModel):
     seeded: dict[str, int]
 
 
-@router.post("/demo/reset", response_model=ResetOut)
+@router.post("/demo/reset", response_model=ResetOut, dependencies=[PrivateDemo])
 def demo_reset(db: DbSession, settings: AppSettings) -> ResetOut:
     """Wipe everything (including actions and audit) and reload NovaCart. DEMO_MODE only."""
     if not settings.demo_mode:

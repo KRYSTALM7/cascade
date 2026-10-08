@@ -11,6 +11,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app import __version__
+from app.api.deps import AppSettings
 from app.core.errors import CascadeError, ErrorCode
 from app.db.session import get_db, ping
 
@@ -21,6 +22,11 @@ router = APIRouter(tags=["health"])
 class HealthResponse(BaseModel):
     status: Literal["ok"]
     version: str
+    # True = demo identities (X-User-Id), demo reset and the Escape Room are enabled. Shown in
+    # the UI so a demo deployment can never be mistaken for a production-safe one.
+    demo_mode: bool
+    # True = a visitor-facing instance: reset and Escape Room runs are refused (PUBLIC_MODE).
+    public_mode: bool
 
 
 class ReadinessResponse(BaseModel):
@@ -29,9 +35,14 @@ class ReadinessResponse(BaseModel):
 
 
 @router.get("/healthz", response_model=HealthResponse)
-def healthz() -> HealthResponse:
+def healthz(settings: AppSettings) -> HealthResponse:
     """Process is alive. Never touches dependencies."""
-    return HealthResponse(status="ok", version=__version__)
+    return HealthResponse(
+        status="ok",
+        version=__version__,
+        demo_mode=settings.demo_mode,
+        public_mode=settings.is_public,
+    )
 
 
 @router.get(

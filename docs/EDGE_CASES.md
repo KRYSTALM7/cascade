@@ -231,14 +231,23 @@ Status (Phase 9 sweep): every row is ✅ except LLM-08, which is ⏭ opt-in by d
 
 | ID | Case | Expected behaviour | Test |
 |---|---|---|---|
-| UI-01 | Consequence graph | One node per report node, agent colour + label, rule id@version, ₹ badge only on money nodes; deterministic left→right layout | ✅ `frontend/src/components/ConsequenceGraph.test.tsx`, `src/graph/layout.test.ts` |
+| UI-01 | Consequence graph | One node per report node, agent colour + "X agent" label, sentence-case tool, `✓ Allowed` on executing nodes, `optional` on non-required reactions, ₹ badge only on money nodes; rule id@version, raw event, condition and authorization message in the node tooltip (not on the face); edge labels in plain words ("Order was modified"); deterministic left→right layout | ✅ `frontend/src/components/ConsequenceGraph.test.tsx`, `src/graph/layout.test.ts` |
 | UI-02 | Blocked / would-fail node | Dashed border, `BLOCKED`/`WOULD FAIL` chip and the reason code on the node | ✅ `ConsequenceGraph.test.tsx › styles a blocked node and names the reason` |
 | UI-03 | Graph fits the pane | Whole graph visible, never zoomed past 110%, re-fits on resize | ✅ `layout.test.ts › fits the whole graph into the pane…` |
-| UI-04 | Blast Radius row | Money out, agents, downstream actions, reversibility, stopped nodes | ✅ `ConsequenceGraph.test.tsx › BlastRadius` |
-| UI-05 | Risk panel | Score + level, 5 dimension meters with weights and one-line explanations, reasons as sentences with codes | ✅ `RiskPanel.test.tsx` |
-| UI-06 | Approval flow | Approve sends `X-User-Id` of the switcher's user; backend refusal (e.g. `APPROVAL_LIMIT_EXCEEDED`) shown as an alert; Execute only when executable; nothing for blocked | ✅ `DecisionBar.test.tsx` |
+| UI-04 | Blast Radius headline | One strip: agents affected · downstream actions · exposure · risk · decision (backend values; ₹ shown without zero paise); exact money, records/systems, customer impact, data sensitivity, reversibility, stopped nodes behind "More impact details" | ✅ `ConsequenceGraph.test.tsx › BlastRadius` |
+| UI-05 | Risk & policy decision | Main view: "HIGH RISK", score / 100, the backend's top 3 reasons (BLOCK → APPROVAL → INFO, no codes), then a full-width decision banner (APPROVAL REQUIRED / BLOCKED / AUTO-APPROVED). Technical details: 5 dimension meters with weights and explanations, every reason with its code, policy version + fingerprint | ✅ `RiskPanel.test.tsx` |
+| UI-06 | Approval gate | Pending: why (backend APPROVAL reasons), amount, risk, requester (agent + human), expiry countdown; Reject / Approve only / Approve & Execute (approve then execute, both with the switcher's `X-User-Id`); backend refusal (e.g. `APPROVAL_LIMIT_EXCEEDED`) shown as an alert and nothing executed; Execute only when executable; nothing for blocked | ✅ `ApprovalGate.test.tsx` |
 | UI-07 | Clarification | Backend candidates rendered as buttons; free-text answer when none | ✅ `ClarificationPrompt.test.tsx` |
-| UI-08 | Money formatting | Exact decimal strings grouped, never re-computed; negatives shown with − | ✅ `src/lib/format.test.ts` |
+| UI-08 | Money formatting | Exact decimal strings grouped, never re-computed; negatives shown with −; headline form drops only a zero paise part (₹72,000) | ✅ `src/lib/format.test.ts` |
+| UI-09 | Landing | `/simulate` without an action leads with "What happens if this agent acts?" and the flagship proposal (Support agent → Modify order ORD-10550 → Reduce laptops: 2 → 1) and one "Simulate consequences" button that parses + simulates the seeded scenario text; scenario cards named by situation, never by outcome; free text / structured input behind "Write your own action" | ✅ `src/pages/SimulatePage.test.tsx` |
+| UI-10 | Persona guidance at the gate | A non-approver sees "You're acting as … · Operator. Approval requires an authorized approver." and "Act as <approver>" switches instead of approve/reject buttons; an approver who is the requester sees the self-approval explanation and only other approvers. Display only: the backend still enforces role, limit and self-approval | ✅ `ApprovalGate.test.tsx › guides an operator…`, `› explains self-approval…` |
+| UI-11 | Expired / rejected | Status EXPIRED, or a pending approval whose `expires_at` has passed → "APPROVAL EXPIRED" + Re-simulate (a NEW action for the same request: re-parse the raw text, else the same structured call); REJECTED → names the approver, Re-simulate + "Look for a safer option" | ✅ `ApprovalGate.test.tsx › turns an expired approval…`, `› treats a pending approval whose window has passed…`, `› after a rejection…` |
+| UI-12 | What-if presets | Scenario-specific presets only (matched on agent + exact scenario text); the flagship's is "keep the order and give 10% compensation" (20% = ₹28,800 stays HIGH 60 under the high-value floor on ORD-10550, verified against the API); no preset → no preset button, empty input | ✅ `WhatIfPanel.test.tsx › are scenario-specific…`, `› offers no preset button…` |
+| UI-13 | What-if comparison | Side-by-side proposed vs alternative (exposure, downstream actions, agents affected, risk, decision, reversibility); deltas worded from the backend's `delta` (e.g. "₹57,600 less exposure"); RECOMMENDED only if `lower_risk`, the same action as requested, no stricter decision, not BLOCKED and no less reversible — otherwise "Lower-risk alternative" with the trade-offs listed (UXP-04/05); the alternative links back to the original | ✅ `WhatIfPanel.test.tsx › sends the preset…`, `› never recommends…` |
+| UI-14 | Flow stepper | Proposed → Simulation → Blast radius → Graph → Risk & decision → Approval → Execution; approval current while pending, skipped when auto-approved, stopped when blocked/rejected/expired; execution current once approved | ✅ `ResultFlow.test.tsx › FlowStepper` |
+| UI-15 | Execution | Before any run: "Nothing has run yet… data is unchanged"; after: each step in plain past tense ("Refund issued", "CRM case created") with its agent; executed actions offer "Reset demo data & run this again" (DEMO_MODE reset, then the same request again) | ✅ `ResultFlow.test.tsx › Execution` |
+| UI-16 | Technical details | One closed disclosure holds the reaction-rule chain (rule@version, events, conditions), risk dimensions/weights, reason codes, narrative source, ids, parameters JSON, report/rules/catalog fingerprints, policy version | ✅ `ResultFlow.test.tsx › TechnicalDetails` |
+| UI-17 | Replaying an executed scenario | A root that would fail with `NO_CHANGE` (the seeded order was already changed by an earlier run) shows a "Reset demo data & run again" hint that resets the demo data and parses the same request again | ✅ `src/pages/SimulatePage.test.tsx › offers a reset-and-replay…` |
 
 ## ESC — Escape Room & hardening (Phase 8)
 
@@ -253,16 +262,101 @@ Status (Phase 9 sweep): every row is ✅ except LLM-08, which is ⏭ opt-in by d
 | ESC-07 | Same-session reuse (`expire_on_commit=False`) | Locked reads use `populate_existing`; approval attached via relationship — no stale identity-map state | ✅ `integration/test_concurrency::*` (regression found and fixed in Phase 8) |
 | ESC-08 | Escape Room page | Expected vs actual per scenario, pass/fail, links to the actions | ✅ `frontend/src/pages/EscapeRoomPage.test.tsx` |
 
+## HID — the hidden cascade (final sprint)
+
+Customer Support trims ORD-10550 (2 laptops, ₹1,44,000, captured) to 1 laptop. Alone that is an authorized, fully reversible edit; what happens next is Finance refunding ₹72,000 under its own permission.
+
+| ID | Case | Expected behaviour | Test |
+|---|---|---|---|
+| HID-01 | Initial action authorized | Root `WILL_EXECUTE`, `authorization.granted = true` | ✅ `unit/test_hidden_cascade::test_a_initial_action_is_authorized` |
+| HID-02 | Initial action alone | `direct_effect`: ₹0.00, FULL, 0 agents, systems `order`, `order_item`; `assess_direct` → **10 LOW · AUTO_APPROVED**, no reasons | ✅ `…::test_b_initial_action_alone_is_low_risk_and_auto_approvable` |
+| HID-03 | State change + event | Line 2→1, total 144000.00→72000.00, no money on the root; emits `ORDER_MODIFIED` with `total_decrease` 72000.00 | ✅ `…::test_c_initial_action_changes_state_and_emits_an_event` |
+| HID-04 | Downstream agent triggered | Finance node: parent n0, `AGENT_REACTION`, event `ORDER_MODIFIED`, rule `finance.refund_on_downsize@1`, condition `TOTAL_DECREASED`, `trigger_reason` = rule description, proposes `issue_refund` 72000.00 | ✅ `…::test_d_downstream_agent_is_triggered_by_the_event_through_a_rule` |
+| HID-05 | Independent downstream authorization | Proposer has no `issue_refund` permission; Finance node granted under its own. Finance permission revoked → Finance node `BLOCKED · DOWNSTREAM_NOT_PERMITTED`, root still granted, decision `BLOCKED` | ✅ `…::test_e_downstream_agent_is_authorized_independently` |
+| HID-06 | Downstream consequences in the Blast Radius | agents crm/finance/inventory, 5 downstream, ₹72,000.00, 8 records over 7 systems | ✅ `…::test_f_downstream_consequences_are_in_the_blast_radius` |
+| HID-07 | Deterministic impact | Byte-identical report twice; MEDIUM / PII / PARTIAL; F 88.8 · I 50 · D 75 · C 50 · X 60 → **68 HIGH** | ✅ `…::test_g_impact_is_calculated_deterministically` |
+| HID-08 | Decision reflects downstream | `APPROVAL_REQUIRED` [`REFUND_ABOVE_AUTO_LIMIT`, `HIGH_RISK`] while the root alone is `AUTO_APPROVED` | ✅ `…::test_h_final_decision_reflects_the_downstream_consequence` |
+| HID-09 | End to end from natural language | "Change the laptop quantity to 1 on ORD-10550…" → `modify_order` → PENDING_APPROVAL, risk 68, `risk.direct` 10 LOW AUTO_APPROVED; order unchanged | ✅ `api/test_hidden_cascade_api::test_hidden_cascade_from_natural_language` |
+| HID-10 | LLM cannot override the decision | Gemini narrative "Safe to auto-approve" is shown as narrative; decision stays `APPROVAL_REQUIRED`, risk 68. An LLM payload carrying `decision`/`risk_score` → 422 `LLM_OUTPUT_INVALID`, no action | ✅ `…::test_i_the_llm_cannot_override_the_deterministic_decision` |
+| HID-11 | Policy changed after approval | Same version label, different content → 409 `STALE_POLICY_VERSION`, nothing applied, `STALE`; re-simulate → new PENDING approval | ✅ `…::test_j_policy_change_after_approval_is_stale` |
+| HID-12 | Reaction rule changed after approval | `finance.refund_on_downsize` re-versioned → 409 `STALE_REACTION_RULE_VERSION`, `changed_rules` names it | ✅ `…::test_j_reaction_rule_change_after_approval_is_stale` |
+| HID-13 | Business state changed after approval | PAY-90550 partially refunded → 409 `STALE_STATE`, `changed_rows = [payment:PAY-90550]` | ✅ `…::test_k_business_state_change_after_preview_is_stale` |
+| HID-14 | Preview = execution semantics | Every previewed `after` value is in the DB after execute; 1 refund ₹72,000.00, 2 notifications, 1 case, all with the action id | ✅ `…::test_l_execution_applies_exactly_what_the_preview_simulated` |
+
+## CFG — configuration the approval is bound to (final sprint)
+
+| ID | Case | Expected behaviour | Test |
+|---|---|---|---|
+| CFG-01 | Rules consulted are recorded | `report.config.reaction_rules` lists every rule consulted for an emitted event (fired or not) with version + digest; changing one changes `rules_fingerprint`; changing a rule for an event the cascade never emits does not | ✅ `unit/test_hidden_cascade::test_report_records_the_configuration_it_depended_on` |
+| CFG-02 | Policy fingerprint | Content hash, not just the `version` label; stored on every risk assessment | ✅ `…::test_policy_fingerprint_tracks_content_not_just_the_version_label` |
+| CFG-03 | Approval records its binding | `APPROVED` audit payload `decided_against` = state, policy (version + fingerprint), rules and catalog fingerprints | ✅ `api/test_hidden_cascade_api::test_approval_records_what_it_was_decided_against` |
+| CFG-04 | Policy staleness | See HID-11 | ✅ HID-11 |
+| CFG-05 | Reaction-rule staleness | See HID-12 | ✅ HID-12 |
+| CFG-06 | Tool / agent / permission configuration staleness | A tool in the cascade reclassified after approval → 409 `STALE_TOOL_CONFIG` | ✅ `api/test_hidden_cascade_api::test_j_tool_configuration_change_after_approval_is_stale` |
+| CFG-07 | Precedence | Reasons checked in order state → policy → rules → catalog; the error code is the first, `details.stale_reasons` lists all; a changed graph or newly blocked report with no other reason is `STALE_STATE` | ✅ HID-11..13 and CFG-06 (`assert_stale` checks the code equals `stale_reasons[0]`) |
+| CFG-08 | Unrelated configuration | A permission never checked by the cascade does not change the report or its fingerprints | ✅ `unit/test_engine::test_unrelated_permission_does_not_change_the_report` (ENG-09) |
+
+## UX — the consequence story on screen (final sprint)
+
+| ID | Case | Expected behaviour | Test |
+|---|---|---|---|
+| UX-01 | Proposed action | Root agent, tool, params and its own authorization (`✓ Authorized`) | ✅ `frontend/src/components/HiddenCascade.test.tsx › shows the proposal as authorized` |
+| UX-02 | Blast Radius contrast | "On its own: looks safe" (LOW · 10/100 · Auto-approved · ₹0) vs "With what happens next" (HIGH · 68/100 · Approval required · ₹72,000) from backend values only; the key message ("The dangerous part isn't the action we authorized…") shows only when the cascade's decision is stricter than the action alone; the plain-English explanation sits in the Blast Radius | ✅ `… › headlines the blast radius with backend values…` |
+| UX-03 | Proposed vs reacted | Root node "proposed this action"; reaction nodes "<Agent> agent · reacted & proposed" with `✓ Allowed` (authorization message in the tooltip); graph caption "Nobody scripted these steps…" and a legend | ✅ `… › marks the root as proposed…`, `ConsequenceGraph.test.tsx › GraphLegend` |
+| UX-04 | Why it happens | Main view: one plain row per reacting agent ("Finance agent saw "Order was modified" and proposed → Issue refund ₹72,000.00 → ✓ Allowed", rule description underneath, `optional` tag). Technical details: state change → rule@version (+condition) → agent → proposal → own authorization → simulated outcome; a downstream denial is shown on its row | ✅ `… › tells the chain in plain words…`, `… › spells out event → rule → …`, `… › shows a downstream authorization failure where it happens` |
+| UX-05 | Demo mode is visible | `/healthz` reports `demo_mode`; the UI shows a "Demo mode" pill in the header (full notice as its tooltip, links to it) and the full "not production authentication" notice at the foot of every page; the API logs a warning at startup | ✅ `api/test_http_contract::test_healthz_reports_ok_and_version` (+ E2E runs with the banner) |
+
+## PUB — public demo safety (final hardening)
+
+| ID | Case | Expected behaviour | Test |
+|---|---|---|---|
+| PUB-01 | Visitor resets the shared DB on a public instance | 403 `PUBLIC_MODE_RESTRICTED` ("unavailable on the public demo"); nothing wiped | ✅ `api/test_public_mode_api::test_public_instance_refuses_demo_reset` |
+| PUB-02 | Visitor runs an Escape Room scenario on a public instance | 403 `PUBLIC_MODE_RESTRICTED`; no rule toggled, no order edited; the scenario list stays readable | ✅ `…::test_public_instance_refuses_escape_room_runs` |
+| PUB-03 | Wrong / missing admin token (incl. cross-site POST, which cannot set the header) | 403 `PUBLIC_MODE_RESTRICTED` | ✅ `…::test_cross_site_style_request_without_the_token_is_refused` |
+| PUB-04 | Presenter sends `X-Demo-Admin-Token` = `DEMO_ADMIN_TOKEN` | Reset allowed (constant-time compare) | ✅ `…::test_presenter_token_unlocks_shared_state_operations` |
+| PUB-05 | API docs on a public instance | `/docs`, `/redoc`, `/openapi.json` → 404; `/healthz` reports `public_mode: true` | ✅ `…::test_public_instance_hides_api_docs_and_reports_public_mode` |
+| PUB-06 | Approval rules in public mode | Operator cannot approve; requester → approver → execute works; self-approval still 403 `SELF_APPROVAL_FORBIDDEN` | ✅ `…::test_public_mode_keeps_the_approval_rules` |
+| PUB-07 | Safe default | `ENVIRONMENT=production` with `PUBLIC_MODE` unset → public; only an explicit `PUBLIC_MODE=false` turns it off | ✅ `…::test_production_defaults_to_public_mode` |
+| PUB-08 | Blank `DEMO_ADMIN_TOKEN=` | Treated as unset (never an empty, matchable token) | ✅ `…::test_blank_admin_token_means_no_token` |
+| PUB-09 | Blank `PUBLIC_MODE=` | Falls back to the environment default (public in production) | ✅ `…::test_blank_public_mode_falls_back_to_the_safe_default` |
+| PUB-10 | Public UI | Reset buttons hidden; Escape Room runs offered as disabled "Presenter only" and never requested | ✅ `frontend/src/pages/EscapeRoomPage.test.tsx › does not offer runs on a public instance` |
+
+## LLMB — Gemini budget (final hardening)
+
+| ID | Case | Expected behaviour | Test |
+|---|---|---|---|
+| LLMB-01 | More Gemini requests than `LLM_CALL_LIMIT` in a window | The excess is answered by the deterministic rules provider; `name` (recorded parser / actor) says `rules` | ✅ `unit/test_llm_budget::test_calls_beyond_the_limit_go_to_the_rules_provider` |
+| LLMB-02 | Window elapses | Budget refills | ✅ `…::test_the_budget_refills_after_the_window` |
+| LLMB-03 | `LLM_CALL_LIMIT=0` | Gemini is never called | ✅ `…::test_a_zero_limit_never_calls_gemini` |
+| LLMB-04 | Factory | Gemini is always built behind the budget; rules remains the default provider | ✅ `…::test_gemini_is_always_built_behind_the_budget` |
+| LLMB-05 | Budget exhausted mid-flow | Parse by Gemini, explanation by rules, decision unchanged (68 · APPROVAL_REQUIRED); next parse recorded as `rules`, no extra Gemini call | ✅ `api/test_hidden_cascade_api::test_gemini_budget_falls_back_without_changing_the_decision` |
+
+## UXP — persona flow and honest what-if (final hardening)
+
+| ID | Case | Expected behaviour | Test |
+|---|---|---|---|
+| UXP-01 | A scenario is started while acting as an approver (or viewer) | Proposed as Ravi (requester); persona switches to Ravi with a visible notice; Asha can then approve | ✅ `frontend/e2e/demo.spec.ts › persona: starting the flagship while acting as Asha…` |
+| UXP-02 | Replay after Approve & Execute while acting as Asha | Replay proposed as Ravi; Asha approves and executes again | ✅ same test |
+| UXP-03 | Asha writes her own request | Backend still refuses her approval (403 `SELF_APPROVAL_FORBIDDEN`); the gate offers "Propose again as Ravi", after which Asha approves and executes; audit shows PARSED/APPROVED/EXECUTED | ✅ `… › self-approval: Asha's own request…` |
+| UXP-04 | What-if alternative is a different action, irreversible, approval-gated | "Lower-risk alternative", compact summary (₹14,400 exposure · 1 downstream action · MEDIUM risk), trade-offs listed (different action / does not preserve the requested outcome, irreversible, approval still required), never "Recommended" | ✅ `WhatIfPanel.test.tsx › sends the preset…`, E2E-09 |
+| UXP-05 | What-if alternative is the same action, no less reversible, no stricter decision, lower risk | "Safer alternative" + Recommended (approval-still-required noted) | ✅ `WhatIfPanel.test.tsx › recommends only the same action…` |
+| UXP-06 | Synthetic-data notice | Footer "Demo environment — use synthetic data only."; "Write your own" warns typed text is stored and visible to others | ✅ visual check (non-interactive text) |
+
 ## E2E — Playwright demo flows (Phase 9)
 
 Run: `make e2e` / `bash scripts/check.sh e2e` / `cd frontend && npm run e2e` (rules provider; each test resets the demo DB).
 
 | ID | Case | Expected behaviour | Test |
 |---|---|---|---|
-| E2E-01 | Hero | reset → "High" quick-pick (NL) → parsed + simulated → 6-node graph, ₹84,500 badge, risk 76, reasons, explanation → approve as approver-asha → execute as ops-ravi → order CANCELLED in "Now" → audit shows PARSED/DECISION/APPROVED/EXECUTED | ✅ `frontend/e2e/demo.spec.ts › hero: NL cancel → …` |
-| E2E-02 | Low-limit approver | approver-dev → alert `APPROVAL_LIMIT_EXCEEDED`, still pending | ✅ `… › a low-limit approver is refused…` |
-| E2E-03 | Unauthorized | root node BLOCKED with `TOOL_NOT_PERMITTED`; no approve/execute buttons | ✅ `… › unauthorized: …` |
+| E2E-01 | Hero | reset → "Cancel a VIP order" (NL) → parsed + simulated → 6-node graph, ₹84,500 badge, risk 76, top reasons, explanation, "Nothing has run yet" → the gate guides ops-ravi (no approve buttons) → "Act as Asha Menon" → Approve only → execute as ops-ravi → order CANCELLED in "Now", "Refund issued" → "View the audit trail" shows PARSED/DECISION/APPROVED/EXECUTED | ✅ `frontend/e2e/demo.spec.ts › hero: NL cancel → …` |
+| E2E-02 | Low-limit approver | approver-dev → Approve & Execute → alert `APPROVAL_LIMIT_EXCEEDED`, nothing executed, still pending | ✅ `… › a low-limit approver is refused…` |
+| E2E-03 | Unauthorized | "Support issues a refund" → root node BLOCKED with `TOOL_NOT_PERMITTED`, BLOCKED banner; no approve/execute buttons, no what-if | ✅ `… › unauthorized: …` |
 | E2E-04 | Auto-approve | ₹1,998 cancel → Auto approved → Execute → Executed | ✅ `… › auto-approve: …` |
-| E2E-05 | What-if | "20% compensation instead" → ₹16,900.00 vs ₹84,500.00, "lower risk", alternative opens | ✅ `… › what-if: …` |
-| E2E-06 | Clarification | "Refund John's order" → 3 Johns → John Mathew → his 3 orders → ORD-10482 → simulated | ✅ `… › clarification: …` |
+| E2E-05 | What-if | VIP cancel, typed "20% compensation instead" → ₹16,900.00 vs ₹84,500.00, "lower risk", alternative opens, "← Back to the original action" returns | ✅ `… › what-if: …` |
+| E2E-06 | Clarification | "Write your own action" → "Refund John's order" → 3 Johns → John Mathew → his 3 orders → ORD-10482 → simulated | ✅ `… › clarification: …` |
 | E2E-07 | Escape room | all four attacks show "✓ Caught" | ✅ `… › escape room: every attack is caught` |
+| E2E-08 | Hidden cascade | Landing hero → "Simulate consequences" → headline 3 agents · 5 downstream · ₹72,000 · HIGH · 68 · Approval required → `✓ Authorized` → LOW·10/100·Auto-approved·₹0 vs HIGH·68/100·Approval required·₹72,000 → legend; n0 "proposed this action", n2 "reacted & proposed" `✓ Allowed` −₹72,000.00; plain row "Finance agent … ✓ Allowed" → risk 68, APPROVAL REQUIRED → Technical details: `finance.refund_on_downsize@1` `✓ granted`, `REFUND_ABOVE_AUTO_LIMIT` → pending approval; ORD-10550 unchanged | ✅ `… › hidden cascade: …` |
+| E2E-09 | Flagship what-if preset | "Compare this alternative" (keep the order, 10% compensation) → "Lower-risk alternative", "₹14,400 exposure · 1 downstream action · MEDIUM risk", ₹57,600 less exposure, 4 fewer downstream actions, HIGH 68 → MEDIUM 52; trade-offs: does not preserve the requested outcome, irreversible, approval still required; no RECOMMENDED | ✅ `… › what-if: the flagship's own preset is shown honestly…` |
+| E2E-11 | Persona: flagship started as Asha | See UXP-01/02 | ✅ `… › persona: …` |
+| E2E-12 | Self-approval exit | See UXP-03 | ✅ `… › self-approval: …` |
+| E2E-10 | Approve & Execute + replay | Flagship → approver-asha → Approve & Execute → Executed, "CRM case created" → "Reset demo data & run this again" → a new pending action with the ₹72,000 headline | ✅ `… › replay: after Approve & Execute…` |

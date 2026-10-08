@@ -30,6 +30,8 @@ services:
       GEMINI_API_KEY: ${GEMINI_API_KEY:-}
       GEMINI_MODEL: ${GEMINI_MODEL:-gemini-3.8-flash}
       DEMO_MODE: "true"
+      # Local presenter stack: shared-state demo operations stay available (never expose this publicly).
+      PUBLIC_MODE: "false"
       CORS_ORIGINS: http://localhost:5173
     depends_on:
       db: { condition: service_healthy }

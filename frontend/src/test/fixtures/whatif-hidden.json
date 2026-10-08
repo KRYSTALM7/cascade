@@ -1,0 +1,392 @@
+{
+  "comparison": {
+    "base": {
+      "action_id": "8ef8078c-677e-4102-98b9-747f06c0c321",
+      "title": "modify order ORD-10550",
+      "money_out": "72000.00",
+      "agents": [
+        "crm",
+        "finance",
+        "inventory"
+      ],
+      "downstream_actions": 5,
+      "records_affected": 8,
+      "risk_score": 68,
+      "risk_level": "HIGH",
+      "reversibility": "PARTIAL",
+      "decision": "APPROVAL_REQUIRED"
+    },
+    "alternative": {
+      "action_id": "b64a2bb4-ab60-4b87-b8b9-507d91b919bd",
+      "title": "issue compensation ORD-10550",
+      "money_out": "14400.00",
+      "agents": [
+        "crm"
+      ],
+      "downstream_actions": 1,
+      "records_affected": 2,
+      "risk_score": 52,
+      "risk_level": "MEDIUM",
+      "reversibility": "NONE",
+      "decision": "APPROVAL_REQUIRED"
+    },
+    "delta": {
+      "money_out": "-57600.00",
+      "agents": -2,
+      "downstream_actions": -4,
+      "records_affected": -6,
+      "risk_score": -16
+    },
+    "lower_risk": true,
+    "explanation": {
+      "summary": "Instead of 'modify order ORD-10550' (₹72,000.00, risk 68 HIGH), 'issue compensation ORD-10550' moves ₹14,400.00 with risk 52 MEDIUM — lower risk.",
+      "bullets": [
+        "Downstream actions: 5 → 1.",
+        "Agents involved: 3 → 1.",
+        "Reversibility: PARTIAL → NONE.",
+        "Decision: APPROVAL_REQUIRED → APPROVAL_REQUIRED."
+      ],
+      "source": "rules",
+      "rejected_figures": []
+    }
+  },
+  "alternative": {
+    "action": {
+      "id": "b64a2bb4-ab60-4b87-b8b9-507d91b919bd",
+      "status": "PENDING_APPROVAL",
+      "decision": "APPROVAL_REQUIRED",
+      "agent_id": "customer-support",
+      "tool_id": "issue_compensation",
+      "parameters": {
+        "order_id": "ORD-10550",
+        "percentage": "10"
+      },
+      "raw_text": "What if we keep the order and give 10% compensation instead?",
+      "parser": "rules",
+      "proposed_by": "ops-ravi",
+      "idempotency_key": null,
+      "parent_action_id": "8ef8078c-677e-4102-98b9-747f06c0c321",
+      "clarification": null,
+      "interpretation": null,
+      "created_at": "2026-10-08T15:14:48.817539Z",
+      "updated_at": "2026-10-08T15:14:48.817539Z"
+    },
+    "report": {
+      "engine_version": "cascade-engine/1",
+      "proposer_agent_id": "customer-support",
+      "root_tool_id": "issue_compensation",
+      "nodes": [
+        {
+          "id": "n0",
+          "depth": 0,
+          "agent_id": "customer-support",
+          "tool_id": "issue_compensation",
+          "params": {
+            "order_id": "ORD-10550",
+            "percentage": "10"
+          },
+          "parent_id": null,
+          "trigger_type": "ROOT",
+          "trigger_event": null,
+          "rule_id": null,
+          "rule_version": null,
+          "trigger_condition": null,
+          "trigger_reason": null,
+          "authorization": {
+            "granted": true,
+            "code": null,
+            "message": "Agent customer-support holds permission to call issue_compensation."
+          },
+          "required": true,
+          "status": "WILL_EXECUTE",
+          "status_code": null,
+          "status_message": null,
+          "summary": "Compensation ₹14,400.00 on ORD-10550; the order stays active.",
+          "reversibility": "NONE",
+          "customer_impact": "LOW",
+          "data_sensitivity": "NONE",
+          "changes": [],
+          "creations": [
+            {
+              "resource_type": "refund",
+              "values": {
+                "kind": "COMPENSATION",
+                "amount": "14400.00",
+                "reason": "",
+                "payment_id": "PAY-90550"
+              }
+            }
+          ],
+          "money": [
+            {
+              "direction": "OUT",
+              "amount": "14400.00",
+              "kind": "COMPENSATION",
+              "description": "Goodwill credit on PAY-90550"
+            }
+          ],
+          "events": [
+            {
+              "type": "COMPENSATION_ISSUED",
+              "payload": {
+                "amount": "14400.00",
+                "order_id": "ORD-10550",
+                "payment_id": "PAY-90550",
+                "customer_id": "CUST-1006"
+              }
+            }
+          ]
+        },
+        {
+          "id": "n1",
+          "depth": 1,
+          "agent_id": "crm",
+          "tool_id": "send_customer_notification",
+          "params": {
+            "channel": "EMAIL",
+            "order_id": "ORD-10550",
+            "template": "COMPENSATION_ISSUED",
+            "customer_id": "CUST-1006"
+          },
+          "parent_id": "n0",
+          "trigger_type": "AGENT_REACTION",
+          "trigger_event": "COMPENSATION_ISSUED",
+          "rule_id": "crm.notify_on_compensation",
+          "rule_version": 1,
+          "trigger_condition": "ALWAYS",
+          "trigger_reason": "CRM tells the customer about their goodwill credit.",
+          "authorization": {
+            "granted": true,
+            "code": null,
+            "message": "Agent crm holds its own permission to call send_customer_notification."
+          },
+          "required": false,
+          "status": "WILL_EXECUTE",
+          "status_code": null,
+          "status_message": null,
+          "summary": "EMAIL COMPENSATION_ISSUED to Ananya Iyer.",
+          "reversibility": "NONE",
+          "customer_impact": "LOW",
+          "data_sensitivity": "PII",
+          "changes": [],
+          "creations": [
+            {
+              "resource_type": "notification",
+              "values": {
+                "channel": "EMAIL",
+                "template": "COMPENSATION_ISSUED",
+                "customer_id": "CUST-1006"
+              }
+            }
+          ],
+          "money": [],
+          "events": []
+        }
+      ],
+      "edges": [
+        {
+          "source": "n0",
+          "target": "n1",
+          "kind": "TRIGGER",
+          "event": "COMPENSATION_ISSUED",
+          "rule_id": "crm.notify_on_compensation",
+          "rule_version": 1
+        }
+      ],
+      "blast_radius": {
+        "agents_affected": [
+          "crm"
+        ],
+        "agent_count": 1,
+        "downstream_actions": 1,
+        "records_affected": [
+          "refund:new@n0#0",
+          "notification:new@n1#0"
+        ],
+        "record_count": 2,
+        "systems_affected": [
+          "notification",
+          "refund"
+        ],
+        "money_out": "14400.00",
+        "money_in": "0.00",
+        "net_money_out": "14400.00",
+        "customer_impact": "LOW",
+        "data_sensitivity": "PII",
+        "reversibility": "NONE",
+        "irreversible_nodes": [
+          "n0",
+          "n1"
+        ],
+        "blocked_nodes": [],
+        "would_fail_nodes": [],
+        "skipped_nodes": []
+      },
+      "direct_effect": {
+        "agents_affected": [],
+        "agent_count": 0,
+        "downstream_actions": 0,
+        "records_affected": [
+          "refund:new@n0#0"
+        ],
+        "record_count": 1,
+        "systems_affected": [
+          "refund"
+        ],
+        "money_out": "14400.00",
+        "money_in": "0.00",
+        "net_money_out": "14400.00",
+        "customer_impact": "LOW",
+        "data_sensitivity": "NONE",
+        "reversibility": "NONE",
+        "irreversible_nodes": [
+          "n0"
+        ],
+        "blocked_nodes": [],
+        "would_fail_nodes": [],
+        "skipped_nodes": []
+      },
+      "fingerprint": "46f4d8ac34d7666b26000e1bd281daf2692c7c16f818de667e6750bc00e0fb65",
+      "reads": [
+        {
+          "resource_type": "customer",
+          "resource_id": "CUST-1006",
+          "version": 1
+        },
+        {
+          "resource_type": "order",
+          "resource_id": "ORD-10550",
+          "version": 1
+        },
+        {
+          "resource_type": "payment",
+          "resource_id": "PAY-90550",
+          "version": 1
+        }
+      ],
+      "config": {
+        "reaction_rules": [
+          {
+            "id": "crm.notify_on_compensation",
+            "version": 1,
+            "enabled": true,
+            "digest": "5873739403fb45fef8cf88f0e9013095b3792c09a04e39c8ae581adb91fb9c49"
+          }
+        ],
+        "rules_fingerprint": "dc664af392edfe8b516b4167f4245380b682f996f6e1cdc5155347dfc4330ad3",
+        "catalog_fingerprint": "4ca39066c7f3a59e20d7847544fd219fbab62ddd776e4c3ae31c4d9ddbe22b58"
+      },
+      "execution_order": [
+        "n0",
+        "n1"
+      ],
+      "blocking": [],
+      "warnings": [],
+      "limit_reached": false,
+      "cycle_detected": false
+    },
+    "risk": {
+      "score": 52,
+      "raw_score": 52,
+      "level": "MEDIUM",
+      "dimensions": [
+        {
+          "key": "financial",
+          "label": "Financial",
+          "score": "51.6",
+          "weight": "0.35",
+          "contribution": "18.05",
+          "explanation": "₹14,400.00 moves out of NovaCart."
+        },
+        {
+          "key": "irreversibility",
+          "label": "Irreversibility",
+          "score": "100.0",
+          "weight": "0.20",
+          "contribution": "20.00",
+          "explanation": "No step can be undone."
+        },
+        {
+          "key": "downstream",
+          "label": "Downstream agents",
+          "score": "25.0",
+          "weight": "0.15",
+          "contribution": "3.75",
+          "explanation": "1 other agent act: crm."
+        },
+        {
+          "key": "customer",
+          "label": "Customer impact",
+          "score": "20.0",
+          "weight": "0.20",
+          "contribution": "4.00",
+          "explanation": "Highest customer impact: LOW."
+        },
+        {
+          "key": "data",
+          "label": "Data sensitivity",
+          "score": "60.0",
+          "weight": "0.10",
+          "contribution": "6.00",
+          "explanation": "Most sensitive data touched: PII."
+        }
+      ],
+      "reasons": [],
+      "policy_version": "2026-10-07.1",
+      "policy_fingerprint": "c8e70df8dd23d7faec600cedf8d9497578dab078c1991f2e61a63ba3a08f4ab6",
+      "direct": {
+        "score": 42,
+        "level": "MEDIUM",
+        "decision": "APPROVAL_REQUIRED",
+        "reasons": [
+          "REFUND_ABOVE_AUTO_LIMIT",
+          "IRREVERSIBLE_AT_MEDIUM_RISK"
+        ]
+      }
+    },
+    "decision": {
+      "decision": "APPROVAL_REQUIRED",
+      "reasons": [
+        {
+          "code": "REFUND_ABOVE_AUTO_LIMIT",
+          "severity": "APPROVAL",
+          "message": "₹14,400.00 would leave NovaCart, above the ₹2,000.00 auto-approve limit.",
+          "node_id": null,
+          "details": {
+            "limit": "₹2,000.00",
+            "money_out": "₹14,400.00"
+          }
+        },
+        {
+          "code": "IRREVERSIBLE_AT_MEDIUM_RISK",
+          "severity": "APPROVAL",
+          "message": "Nothing in this cascade can be undone and risk is MEDIUM.",
+          "node_id": null,
+          "details": {
+            "level": "MEDIUM"
+          }
+        }
+      ],
+      "money_out": "14400.00",
+      "policy_version": "2026-10-07.1"
+    },
+    "explanation": {
+      "summary": "Issue compensation ORD-10550 triggers 1 downstream action across 1 other agent (crm) and moves ₹14,400.00 out of NovaCart. Risk is MEDIUM (52/100), so a human approver must decide.",
+      "bullets": [
+        "₹14,400.00 would leave NovaCart, above the ₹2,000.00 auto-approve limit.",
+        "Nothing in this cascade can be undone and risk is MEDIUM.",
+        "crm: EMAIL COMPENSATION_ISSUED to Ananya Iyer."
+      ],
+      "source": "rules",
+      "rejected_figures": []
+    },
+    "approval": {
+      "status": "PENDING",
+      "expires_at": "2026-10-08T15:44:48.851722Z",
+      "decided_by": null,
+      "decided_at": null,
+      "comment": null
+    },
+    "executions": []
+  }
+}

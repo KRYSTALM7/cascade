@@ -5,7 +5,9 @@ import { defineConfig, devices } from "@playwright/test";
  * Each test resets NovaCart through /api/demo/reset, so the backend must run with DEMO_MODE=true
  * (it WIPES the database it points at). Already-running dev servers on :8000 / :5173 are reused.
  */
-const backendCmd = process.env.E2E_BACKEND_CMD ?? "uv run uvicorn app.main:app --port 8000";
+const backendUrl = process.env.E2E_BACKEND_URL ?? "http://localhost:8000";
+const webUrl = process.env.E2E_BASE_URL ?? "http://localhost:5173";
+const backendCmd = process.env.E2E_BACKEND_CMD ?? `uv run uvicorn app.main:app --port ${new URL(backendUrl).port || "8000"}`;
 
 export default defineConfig({
   testDir: "./e2e",
@@ -16,7 +18,7 @@ export default defineConfig({
   expect: { timeout: 10_000 },
   reporter: [["list"]],
   use: {
-    baseURL: "http://localhost:5173",
+    baseURL: webUrl,
     trace: "retain-on-failure",
     viewport: { width: 1440, height: 1000 },
   },
@@ -25,14 +27,15 @@ export default defineConfig({
     {
       command: backendCmd,
       cwd: "../backend",
-      url: "http://localhost:8000/readyz",
+      url: `${backendUrl}/readyz`,
       reuseExistingServer: true,
       timeout: 60_000,
       env: { DEMO_MODE: "true", LLM_PROVIDER: "rules", LOG_JSON: "false" },
     },
     {
-      command: "npm run dev",
-      url: "http://localhost:5173",
+      command: `npm run dev -- --port ${new URL(webUrl).port || "5173"} --strictPort`,
+      url: webUrl,
+      env: { VITE_DEV_BACKEND_URL: backendUrl },
       reuseExistingServer: true,
       timeout: 60_000,
     },

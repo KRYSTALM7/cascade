@@ -40,8 +40,8 @@ describe("nodeMoneyOut", () => {
 
 describe("edgeLabel", () => {
   const edge: GraphEdge = { source: "n0", target: "n1", kind: "TRIGGER", event: "ORDER_CANCELLED", rule_id: "r", rule_version: 1 };
-  it("shows the trigger event, or what a duplicate/cycle edge means", () => {
-    expect(edgeLabel(edge)).toBe("ORDER_CANCELLED");
+  it("shows the trigger event in plain words, or what a duplicate/cycle edge means", () => {
+    expect(edgeLabel(edge)).toBe("Order was cancelled");
     expect(edgeLabel({ ...edge, kind: "DUPLICATE" })).toBe("duplicate · runs once");
     expect(edgeLabel({ ...edge, kind: "CYCLE" })).toBe("cycle · cut");
   });

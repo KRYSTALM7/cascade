@@ -42,6 +42,8 @@ class Settings(BaseSettings):
         description="SQLAlchemy URL. Must use the psycopg (v3) driver.",
     )
     db_pool_size: int = Field(default=5, ge=1, le=50)
+    # Extra connections beyond the pool under burst. Per instance: pool_size + max_overflow.
+    db_max_overflow: int = Field(default=10, ge=0, le=50)
     db_echo: bool = False
 
     # NoDecode: accept "a,b" CSV from env instead of requiring a JSON list.
@@ -53,8 +55,19 @@ class Settings(BaseSettings):
     gemini_api_key: SecretStr | None = None
     gemini_model: str = "gemini-3.8-flash"
     llm_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
+    # Gemini budget per process: at most `llm_call_limit` Gemini requests per window; beyond it
+    # the deterministic rules provider answers instead (0 = never call Gemini).
+    llm_call_limit: int = Field(default=200, ge=0, le=100_000)
+    llm_call_window_seconds: int = Field(default=3600, ge=1, le=86_400)
 
     demo_mode: bool = False
+    # A visitor-facing deployment: shared-state demo operations (reset, Escape Room runs) and the
+    # OpenAPI docs are off. Unset = ON when ENVIRONMENT=production, so a cloud deploy is safe by
+    # default; a private presenter instance must opt out explicitly with PUBLIC_MODE=false.
+    public_mode: bool | None = None
+    # Optional: lets a presenter run reset / Escape Room on a public instance by sending the
+    # header X-Demo-Admin-Token. Unset = nobody can, on a public instance.
+    demo_admin_token: SecretStr | None = None
     policy_path: Path = BACKEND_ROOT / "policy" / "policy.yaml"
     # Tests/demo only: execution of this tool id raises (e.g. "send_customer_notification").
     fault_injection: str | None = None
@@ -69,10 +82,24 @@ class Settings(BaseSettings):
             raise ValueError("database_url must be a PostgreSQL URL (postgresql+psycopg://...)")
         return value
 
-    @field_validator("gemini_api_key", mode="before")
+    @property
+    def is_public(self) -> bool:
+        if self.public_mode is None:
+            return self.environment is Environment.PRODUCTION
+        return self.public_mode
+
+    @field_validator("gemini_api_key", "demo_admin_token", mode="before")
     @classmethod
     def _blank_key_is_no_key(cls, value: object) -> object:
         # `GEMINI_API_KEY=` in a .env file must mean "unset", not "a key that is empty".
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator("public_mode", mode="before")
+    @classmethod
+    def _blank_public_mode_is_unset(cls, value: object) -> object:
+        # `PUBLIC_MODE=` must fall back to the safe environment default, not fail or mean false.
         if isinstance(value, str) and not value.strip():
             return None
         return value

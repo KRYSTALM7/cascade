@@ -37,6 +37,18 @@ export interface MoneyOut {
   description: string;
 }
 
+/** The node's own, independent authorization check (never inherited from the proposer). */
+export interface Authorization {
+  granted: boolean;
+  code: string | null;
+  message: string;
+}
+
+export interface EventOut {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
 export interface GraphNode {
   id: string;
   depth: number;
@@ -48,6 +60,9 @@ export interface GraphNode {
   trigger_event: string | null;
   rule_id: string | null;
   rule_version: number | null;
+  trigger_condition?: string | null;
+  trigger_reason?: string | null;
+  authorization?: Authorization | null;
   required: boolean;
   status: NodeStatus;
   status_code: string | null;
@@ -59,6 +74,7 @@ export interface GraphNode {
   changes: ChangeOut[];
   creations: { resource_type: string; values: Record<string, unknown> }[];
   money: MoneyOut[];
+  events?: EventOut[];
 }
 
 export interface GraphEdge {
@@ -83,6 +99,7 @@ export interface BlastRadius {
   downstream_actions: number;
   records_affected: string[];
   record_count: number;
+  systems_affected?: string[];
   money_out: Money;
   money_in: Money;
   net_money_out: Money;
@@ -102,7 +119,14 @@ export interface ConsequenceReport {
   nodes: GraphNode[];
   edges: GraphEdge[];
   blast_radius: BlastRadius;
+  /** The proposed action alone (root node only), for contrast with the full cascade. */
+  direct_effect?: BlastRadius | null;
   fingerprint: string;
+  config?: {
+    reaction_rules: { id: string; version: number; enabled: boolean; digest: string }[];
+    rules_fingerprint: string;
+    catalog_fingerprint: string;
+  } | null;
   execution_order: string[];
   blocking: EngineReason[];
   warnings: EngineReason[];
@@ -134,6 +158,9 @@ export interface RiskAssessment {
   dimensions: RiskDimension[];
   reasons: PolicyReason[];
   policy_version: string;
+  policy_fingerprint?: string;
+  /** The proposed action scored and decided as if no agent reacted (backend-computed). */
+  direct?: { score: number; level: RiskLevel; decision: Decision; reasons: string[] } | null;
 }
 
 export interface Candidate {

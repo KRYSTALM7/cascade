@@ -1,6 +1,7 @@
 """NovaCart demo dataset — declarative, deterministic, and annotated with what each row is FOR.
 
 Demo scenarios:
+  HIDDEN  customer-support modify_order ORD-10550 (laptops 2->1)  -> Finance refunds ₹72,000, CRM
   HIGH    customer-support cancel_order ORD-10482 (₹84,500, VIP) -> Finance, Inventory, CRM
   MEDIUM  customer-support modify_order ORD-10495 (watch 1->2)  -> Inventory (+restock), CRM
   LOW     crm send_customer_notification for ORD-10501           -> no downstream
@@ -716,5 +717,14 @@ ORDERS: list[OrderSeed] = [
         [("SKU-LAP-001", 1)],
         PaymentSeed("PAY-90540", PaymentMethod.CARD),
         "Second high-value order for concurrency/race demos.",
+    ),
+    OrderSeed(
+        "ORD-10550",
+        "CUST-1006",
+        OrderStatus.CONFIRMED,
+        [("SKU-LAP-001", 2)],
+        PaymentSeed("PAY-90550", PaymentMethod.CARD),
+        "HIDDEN CASCADE: Support trims 2 laptops to 1 (a fully reversible edit, LOW alone) -> "
+        "Finance independently refunds ₹72,000 (irreversible) -> CRM case + emails -> HIGH.",
     ),
 ]

@@ -103,3 +103,33 @@ A new session resumes from the **Next step** line of the latest entry. Rules: `C
 - Open decision for the maintainer: Medium scenario scores 34 = LOW (see Phase 4).
 - Not committed (by rule). Suggested commits are in the session summary.
 - Resume: nothing pending. To demo: `docker compose up --build`, open :5173, follow `docs/DEMO_SCRIPT.md`.
+
+## Final sprint — hidden cascade, Blast Radius story, configuration staleness ✅
+- Gate: backend **329 passed, 1 skipped** (opt-in live Gemini); frontend **39 passed**, eslint 0 warnings, tsc, build; Playwright **8 passed**.
+- Killer scenario (seed): `ORD-10550` (CUST-1006, 2 × SKU-LAP-001, ₹1,44,000 captured). "Change the laptop quantity to 1 on ORD-10550…" → Support `modify_order`: alone 10 LOW AUTO_APPROVED (₹0, FULL); with the cascade, Finance (own permission) refunds ₹72,000 via `finance.refund_on_downsize@1`, CRM case + 2 emails, Inventory release → 68 HIGH APPROVAL_REQUIRED. Seed-count assertions updated (orders 10 → 11; laptop reserved 2 → 4).
+- Engine/report (no model rewrite): `NodeOut.authorization` (per-node, independent), `trigger_condition`, `trigger_reason`; `BlastRadius.systems_affected`; `ConsequenceReport.direct_effect` (root alone) + `direct_view()`; `ConsequenceReport.config` (consulted rules with version + digest, rules and catalog fingerprints). New fields are optional so stored reports still load.
+- Risk/policy: `Policy.fingerprint()`; `RiskAssessment.policy_fingerprint` and `.direct` (`assess_direct`: same scorer + decision on the root-only view; contrast only, never a decision input).
+- Execution: same lock → re-simulate → fingerprint flow; `stale_reasons` adds `STALE_POLICY_VERSION`, `STALE_REACTION_RULE_VERSION`, `STALE_TOOL_CONFIG` (409, `details.stale_reasons`, `changed_rules`). Approval audit records `decided_against`.
+- Demo safety: `/healthz` reports `demo_mode`; UI banner "not production authentication"; startup warning when DEMO_MODE is on.
+- UI: Simulate page ordered as the story — 1 Proposed action (own authorization) → 2 Blast Radius (alone vs with what happens next, systems, customer impact, data sensitivity, verdict) → 3 Graph (`DIRECT ACTION` vs `AGENT-TRIGGERED`, per-node authorization) → 4 Why it happens (event → rule → agent → proposal → own authorization → simulation) → 5 Risk → 6 Policy decision. New "Hidden cascade" quick-pick; fixture `hidden.json` captured from the real API.
+- Tests: `unit/test_hidden_cascade.py` (HID-01..08, CFG-01/02), `api/test_hidden_cascade_api.py` (HID-09..14, CFG-03/06), `HiddenCascade.test.tsx` (UX-01..04), E2E-08.
+- Escape Room unchanged (its four scenarios already run through simulate → Blast Radius → risk → policy).
+- Not committed (by rule).
+
+## UI/UX polish — product-demo pass (Ipshita's feedback) ✅
+- Frontend only; no backend, engine, risk, policy, authorization or execution change. Gate: frontend **76 passed** (13 files), eslint 0 warnings, tsc, build; Playwright **10 passed** against the real backend (rules provider).
+- First screen: hero "What happens if this agent acts?" (Support agent → Modify order ORD-10550 → Reduce laptops: 2 → 1 → Simulate consequences); situation-named scenario cards; NL/structured input behind "Write your own action"; secondary nav for Dashboard/Agents/Escape room/Audit; demo-mode notice as a header pill + page-foot notice.
+- Result page order: stepper → Proposed action → Blast Radius headline (agents · downstream · exposure · risk · decision, key message, plain-English explanation, "On its own: looks safe" vs "With what happens next", details collapsed) → graph with legend, "reacted & proposed" nodes, ✓ Allowed / optional, plain event labels, plain chain → Risk & policy decision (score, top reasons, decision banner) → Approval gate (why/amount/risk/requester/countdown, persona guidance, Reject / Approve only / Approve & Execute, expired/rejected recovery) → What-if ("Is there a safer option?", scenario presets, side-by-side, deltas, honest trade-offs; Recommended only when justified) → Execution (plain steps, order before/after/now, reset & replay) → Technical details (rules, weights, codes, fingerprints, raw params).
+- What-if presets verified against the API: ORD-10550 at 20% (₹28,800) stays HIGH 60 (high-value floor), so the flagship preset is 10% (₹14,400 → MEDIUM 52, ₹57,600 less, 4 fewer downstream actions, still approval required). Every compensation needs approval, so no alternative auto-approves. VIP cancel keeps 20% (₹16,900, MEDIUM 53).
+- `DecisionBar` replaced by `ApprovalGate` + `Execution`; all of its test cases moved to `ApprovalGate.test.tsx`. New fixtures captured from the real API: `whatif-hidden.json`, `hidden-executed.json`.
+- Rows: UI-01/04/05/06/08 revised; UI-09..17 added; UX-02..05 revised; E2E-01/02/03/05/06/08 revised; E2E-09/10 added.
+- Not committed (by rule).
+
+## Final hardening — public demo safety, persona flow, honest what-if, Gemini cap ✅
+- Gate: backend **343 passed, 1 skipped** (opt-in live Gemini); frontend **78 passed**, eslint 0 warnings, tsc, build; Playwright **12 passed** (isolated `cascade_e2e` DB, backend :8010, Vite :5180 via `E2E_BACKEND_URL` / `E2E_BASE_URL`).
+- `PUBLIC_MODE` (default on when `ENVIRONMENT=production`): `/api/demo/reset` and `/api/escape-room/{id}/run` → 403 `PUBLIC_MODE_RESTRICTED` unless `X-Demo-Admin-Token` matches `DEMO_ADMIN_TOKEN`; API docs disabled; `/healthz` reports `public_mode`; UI hides reset / shows Escape Room "Presenter only".
+- Persona: scenario runs, replays and re-proposals are made by the requester (Ravi) with a visible notice; the gate offers "Propose again as Ravi" for an approver's own request. Backend self-approval refusal unchanged.
+- What-if wording: "Recommended" only for the same action, no less reversible, no stricter decision; otherwise "Lower-risk alternative" with trade-offs (different action / outcome not preserved, irreversible, approval still required). Calculations unchanged.
+- Gemini: always behind a per-process budget (`LLM_CALL_LIMIT` / `LLM_CALL_WINDOW_SECONDS`); beyond it the rules provider answers and is recorded as the parser. `DB_MAX_OVERFLOW` configurable for Cloud SQL sizing.
+- `docs/DEPLOY.md` rewritten: public web + public-URL API protected by PUBLIC_MODE (nginx cannot attach ID tokens), Cloud SQL pool sizing, secrets, verification curls, presenter reset.
+- Not committed (by rule).

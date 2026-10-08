@@ -12,7 +12,7 @@ from sqlalchemy.orm import Session
 from app.domain.consequence.engine import simulate_action
 from app.domain.consequence.report import ConsequenceReport
 from app.domain.enums import ActionStatus, ActorType, ApprovalStatus, Decision
-from app.domain.policy.engine import DecisionResult, decide
+from app.domain.policy.engine import DecisionResult, assess_direct, decide
 from app.domain.policy.loader import cascade_limits
 from app.domain.policy.reasons import PolicyReason
 from app.domain.risk.scorer import RiskAssessment, score_report
@@ -57,6 +57,7 @@ def compute(ctx: ServiceContext, action: Action) -> Outcome:
         limits=cascade_limits(ctx.policy),
     )
     risk = score_report(report, ctx.policy)
+    risk = risk.model_copy(update={"direct": assess_direct(report, ctx.policy)})
     return Outcome(report, risk, decide(report, risk, ctx.policy))
 
 

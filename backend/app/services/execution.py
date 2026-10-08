@@ -1,6 +1,10 @@
 """Execution (blueprint §H): lock -> re-simulate -> fingerprint check -> apply the SAME previewed
 changes node by node in topological order, each inside a SAVEPOINT.
 
+The freshness check covers business state AND the configuration the preview depended on: an
+approval is bound to the policy, the reaction rules and the agent/tool/permission rows it was
+decided under. Any difference -> 409 with the specific STALE_* code, nothing applied.
+
 Required step fails -> everything rolled back -> FAILED (retryable; new attempt row next time).
 Optional step fails -> that step (and anything it would have triggered) rolled back, the rest kept
 -> PARTIALLY_EXECUTED. A different fingerprint -> 409 STALE_STATE, nothing applied.
@@ -25,7 +29,7 @@ from app.services import audit
 from app.services.actions import PROPOSERS, ActionService
 from app.services.approvals import expire_if_due
 from app.services.context import ServiceContext, require_role
-from app.services.outcomes import compute, load_outcome
+from app.services.outcomes import Outcome, compute, load_outcome
 from app.services.transitions import transition
 
 EXECUTABLE = (ActionStatus.AUTO_APPROVED, ActionStatus.APPROVED, ActionStatus.FAILED)
@@ -48,8 +52,49 @@ class InjectedFaultError(RuntimeError):
     """FAULT_INJECTION: deterministic failure of one tool, for tests and the demo."""
 
 
+_STALE_MESSAGES: dict[ErrorCode, str] = {
+    ErrorCode.STALE_STATE: "The world changed since this action was simulated; nothing was "
+    "applied. Re-simulate to see the current consequences.",
+    ErrorCode.STALE_POLICY_VERSION: "The approval policy changed since this action was "
+    "simulated; nothing was applied. Re-simulate under the current policy.",
+    ErrorCode.STALE_REACTION_RULE_VERSION: "Agent reaction rules this cascade depends on changed "
+    "since simulation; nothing was applied. Re-simulate to see what the agents would do now.",
+    ErrorCode.STALE_TOOL_CONFIG: "An agent, tool or permission this cascade depends on changed "
+    "since simulation; nothing was applied. Re-simulate.",
+}
+
+
 def graph_shape(report: ConsequenceReport) -> list[tuple[str, str, str, str]]:
     return [(n.agent_id, n.tool_id, canonical_json(n.params), n.status.value) for n in report.nodes]
+
+
+def stale_reasons(stored: Outcome, fresh: Outcome) -> list[ErrorCode]:
+    """Why the approved preview no longer describes what execution would do (empty = fresh).
+    Business state first, then policy, reaction rules and agent/tool/permission configuration;
+    a changed graph or a newly blocked report with no other explanation is stale state."""
+    old, new = stored.report, fresh.report
+    reasons: list[ErrorCode] = []
+    if new.fingerprint != old.fingerprint:
+        reasons.append(ErrorCode.STALE_STATE)
+    policy_then = (stored.risk.policy_version, stored.risk.policy_fingerprint)
+    if (fresh.risk.policy_version, fresh.risk.policy_fingerprint) != policy_then:
+        reasons.append(ErrorCode.STALE_POLICY_VERSION)
+    if old.config is None or new.config is None:
+        reasons.append(ErrorCode.STALE_REACTION_RULE_VERSION)  # unknown = changed (fail closed)
+    else:
+        if new.config.rules_fingerprint != old.config.rules_fingerprint:
+            reasons.append(ErrorCode.STALE_REACTION_RULE_VERSION)
+        if new.config.catalog_fingerprint != old.config.catalog_fingerprint:
+            reasons.append(ErrorCode.STALE_TOOL_CONFIG)
+    if not reasons and (graph_shape(new) != graph_shape(old) or new.is_blocked):
+        reasons.append(ErrorCode.STALE_STATE)
+    return reasons
+
+
+def changed_rules(stored: ConsequenceReport, fresh: ConsequenceReport) -> list[str]:
+    before = {r.id: r for r in stored.config.reaction_rules} if stored.config else {}
+    after = {r.id: r for r in fresh.config.reaction_rules} if fresh.config else {}
+    return sorted(i for i in before.keys() | after.keys() if before.get(i) != after.get(i))
 
 
 class ExecutionService:
@@ -77,18 +122,21 @@ class ExecutionService:
         )
         self.session.expire_all()  # read the locked rows fresh, never from the identity map
         fresh = compute(self.ctx, action)
-        if (
-            fresh.report.fingerprint != stored.report.fingerprint
-            or graph_shape(fresh.report) != graph_shape(stored.report)
-            or fresh.report.is_blocked
-        ):
-            return self._stale(user, action, stored.report, fresh.report)
+        reasons = stale_reasons(stored, fresh)
+        if reasons:
+            return self._stale(user, action, stored, fresh, reasons)
 
         return self._apply(user, action, fresh.report)
 
     def _stale(
-        self, user: User, action: Action, stored: ConsequenceReport, fresh: ConsequenceReport
+        self,
+        user: User,
+        action: Action,
+        stored_outcome: Outcome,
+        fresh_outcome: Outcome,
+        reasons: list[ErrorCode],
     ) -> Action:
+        stored, fresh = stored_outcome.report, fresh_outcome.report
         before = {(r.resource_type, r.resource_id): r.version for r in stored.reads}
         after = {(r.resource_type, r.resource_id): r.version for r in fresh.reads}
         changed = sorted(
@@ -96,6 +144,11 @@ class ExecutionService:
             for (t, i) in before.keys() | after.keys()
             if before.get((t, i)) != after.get((t, i))
         )
+        rules = changed_rules(stored, fresh)
+        policy = {
+            "approved": stored_outcome.risk.policy_version,
+            "current": fresh_outcome.risk.policy_version,
+        }
         transition(action, ActionStatus.STALE)
         audit.record(
             self.session,
@@ -104,19 +157,27 @@ class ExecutionService:
             actor_type=ActorType.SYSTEM,
             actor_id=user.id,
             payload={
+                "stale_reasons": [r.value for r in reasons],
                 "simulated_fingerprint": stored.fingerprint,
                 "current_fingerprint": fresh.fingerprint,
                 "changed_rows": changed,
+                "changed_rules": rules,
+                "policy_version": policy,
                 "now_blocked": [b.code for b in fresh.blocking],
             },
         )
         self.session.commit()
         raise CascadeError(
-            ErrorCode.STALE_STATE,
-            "The world changed since this action was simulated; nothing was applied. "
-            "Re-simulate to see the current consequences.",
+            reasons[0],
+            _STALE_MESSAGES[reasons[0]],
             http_status=409,
-            details={"action_id": str(action.id), "changed_rows": changed},
+            details={
+                "action_id": str(action.id),
+                "stale_reasons": [r.value for r in reasons],
+                "changed_rows": changed,
+                "changed_rules": rules,
+                "policy_version": policy,
+            },
         )
 
     def _apply(self, user: User, action: Action, report: ConsequenceReport) -> Action:

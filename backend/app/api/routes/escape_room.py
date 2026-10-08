@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from fastapi import APIRouter
 
-from app.api.deps import Context
+from app.api.deps import Context, PrivateDemo
 from app.core.errors import CascadeError, ErrorCode
 from app.services.escape_room import SCENARIOS, EscapeRoomService, Scenario, ScenarioResult
 
@@ -16,7 +16,7 @@ def list_scenarios() -> list[Scenario]:
     return SCENARIOS
 
 
-@router.post("/{scenario_id}/run", response_model=ScenarioResult)
+@router.post("/{scenario_id}/run", response_model=ScenarioResult, dependencies=[PrivateDemo])
 def run_scenario(scenario_id: str, ctx: Context) -> ScenarioResult:
     if not ctx.settings.demo_mode:
         raise CascadeError(

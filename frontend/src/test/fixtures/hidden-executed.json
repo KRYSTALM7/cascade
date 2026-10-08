@@ -1,0 +1,813 @@
+{
+  "action": {
+    "id": "8ef8078c-677e-4102-98b9-747f06c0c321",
+    "status": "EXECUTED",
+    "decision": "APPROVAL_REQUIRED",
+    "agent_id": "customer-support",
+    "tool_id": "modify_order",
+    "parameters": {
+      "lines": [
+        {
+          "sku": "SKU-LAP-001",
+          "quantity": 1
+        }
+      ],
+      "order_id": "ORD-10550"
+    },
+    "raw_text": "Change the laptop quantity to 1 on ORD-10550, customer only needs one",
+    "parser": "rules",
+    "proposed_by": "ops-ravi",
+    "idempotency_key": null,
+    "parent_action_id": null,
+    "clarification": null,
+    "interpretation": {
+      "llm": {
+        "intent": "modify_order",
+        "confidence": 0.9,
+        "parameters": {
+          "sku": "SKU-LAP-001",
+          "amount": null,
+          "reason": null,
+          "status": null,
+          "channel": null,
+          "order_id": "ORD-10550",
+          "quantity": 1,
+          "template": null,
+          "payment_id": null,
+          "percentage": null,
+          "customer_id": null,
+          "customer_name": null
+        },
+        "ambiguities": []
+      },
+      "missing": [],
+      "customer_name": null,
+      "injection_markers": []
+    },
+    "created_at": "2026-10-08T15:14:44.613546Z",
+    "updated_at": "2026-10-08T15:14:52.989541Z"
+  },
+  "report": {
+    "engine_version": "cascade-engine/1",
+    "proposer_agent_id": "customer-support",
+    "root_tool_id": "modify_order",
+    "nodes": [
+      {
+        "id": "n0",
+        "depth": 0,
+        "agent_id": "customer-support",
+        "tool_id": "modify_order",
+        "params": {
+          "lines": [
+            {
+              "sku": "SKU-LAP-001",
+              "quantity": 1
+            }
+          ],
+          "order_id": "ORD-10550"
+        },
+        "parent_id": null,
+        "trigger_type": "ROOT",
+        "trigger_event": null,
+        "rule_id": null,
+        "rule_version": null,
+        "trigger_condition": null,
+        "trigger_reason": null,
+        "authorization": {
+          "granted": true,
+          "code": null,
+          "message": "Agent customer-support holds permission to call modify_order."
+        },
+        "required": true,
+        "status": "WILL_EXECUTE",
+        "status_code": null,
+        "status_message": null,
+        "summary": "Order ORD-10550: total 144000.00 → 72000.00.",
+        "reversibility": "FULL",
+        "customer_impact": "MEDIUM",
+        "data_sensitivity": "NONE",
+        "changes": [
+          {
+            "resource_type": "order_item",
+            "resource_id": "ORD-10550/SKU-LAP-001",
+            "field": "quantity",
+            "before": 2,
+            "after": 1
+          },
+          {
+            "resource_type": "order",
+            "resource_id": "ORD-10550",
+            "field": "total_amount",
+            "before": "144000.00",
+            "after": "72000.00"
+          }
+        ],
+        "creations": [],
+        "money": [],
+        "events": [
+          {
+            "type": "ORDER_MODIFIED",
+            "payload": {
+              "order_id": "ORD-10550",
+              "new_total": "72000.00",
+              "old_total": "144000.00",
+              "customer_id": "CUST-1006",
+              "total_decrease": "72000.00",
+              "total_increase": "0.00",
+              "decreased_lines": [
+                {
+                  "sku": "SKU-LAP-001",
+                  "quantity": 1
+                }
+              ],
+              "increased_lines": []
+            }
+          }
+        ]
+      },
+      {
+        "id": "n1",
+        "depth": 1,
+        "agent_id": "inventory",
+        "tool_id": "release_inventory",
+        "params": {
+          "lines": [
+            {
+              "sku": "SKU-LAP-001",
+              "quantity": 1
+            }
+          ],
+          "order_id": "ORD-10550"
+        },
+        "parent_id": "n0",
+        "trigger_type": "AGENT_REACTION",
+        "trigger_event": "ORDER_MODIFIED",
+        "rule_id": "inventory.release_on_modify",
+        "rule_version": 1,
+        "trigger_condition": "QUANTITY_DECREASED",
+        "trigger_reason": "Inventory releases stock for removed quantities.",
+        "authorization": {
+          "granted": true,
+          "code": null,
+          "message": "Agent inventory holds its own permission to call release_inventory."
+        },
+        "required": true,
+        "status": "WILL_EXECUTE",
+        "status_code": null,
+        "status_message": null,
+        "summary": "Return 1 x SKU-LAP-001 to stock.",
+        "reversibility": "FULL",
+        "customer_impact": "NONE",
+        "data_sensitivity": "NONE",
+        "changes": [
+          {
+            "resource_type": "inventory_item",
+            "resource_id": "SKU-LAP-001",
+            "field": "reserved",
+            "before": 4,
+            "after": 3
+          },
+          {
+            "resource_type": "order_item",
+            "resource_id": "ORD-10550/SKU-LAP-001",
+            "field": "reserved_quantity",
+            "before": 2,
+            "after": 1
+          }
+        ],
+        "creations": [],
+        "money": [],
+        "events": [
+          {
+            "type": "STOCK_RELEASED",
+            "payload": {
+              "lines": [
+                {
+                  "sku": "SKU-LAP-001",
+                  "quantity": 1
+                }
+              ],
+              "order_id": "ORD-10550"
+            }
+          }
+        ]
+      },
+      {
+        "id": "n2",
+        "depth": 1,
+        "agent_id": "finance",
+        "tool_id": "issue_refund",
+        "params": {
+          "amount": "72000.00",
+          "reason": "ORDER_MODIFIED",
+          "order_id": "ORD-10550"
+        },
+        "parent_id": "n0",
+        "trigger_type": "AGENT_REACTION",
+        "trigger_event": "ORDER_MODIFIED",
+        "rule_id": "finance.refund_on_downsize",
+        "rule_version": 1,
+        "trigger_condition": "TOTAL_DECREASED",
+        "trigger_reason": "Finance refunds the difference when an order gets cheaper.",
+        "authorization": {
+          "granted": true,
+          "code": null,
+          "message": "Agent finance holds its own permission to call issue_refund."
+        },
+        "required": true,
+        "status": "WILL_EXECUTE",
+        "status_code": null,
+        "status_message": null,
+        "summary": "Refund ₹72,000.00 to PAY-90550 (CARD).",
+        "reversibility": "NONE",
+        "customer_impact": "MEDIUM",
+        "data_sensitivity": "NONE",
+        "changes": [
+          {
+            "resource_type": "payment",
+            "resource_id": "PAY-90550",
+            "field": "refunded_amount",
+            "before": "0.00",
+            "after": "72000.00"
+          },
+          {
+            "resource_type": "payment",
+            "resource_id": "PAY-90550",
+            "field": "status",
+            "before": "CAPTURED",
+            "after": "PARTIALLY_REFUNDED"
+          }
+        ],
+        "creations": [
+          {
+            "resource_type": "refund",
+            "values": {
+              "kind": "REFUND",
+              "amount": "72000.00",
+              "reason": "ORDER_MODIFIED",
+              "payment_id": "PAY-90550"
+            }
+          }
+        ],
+        "money": [
+          {
+            "direction": "OUT",
+            "amount": "72000.00",
+            "kind": "REFUND",
+            "description": "Refund on PAY-90550"
+          }
+        ],
+        "events": [
+          {
+            "type": "REFUND_ISSUED",
+            "payload": {
+              "amount": "72000.00",
+              "reason": "ORDER_MODIFIED",
+              "order_id": "ORD-10550",
+              "payment_id": "PAY-90550",
+              "customer_id": "CUST-1006"
+            }
+          }
+        ]
+      },
+      {
+        "id": "n3",
+        "depth": 1,
+        "agent_id": "crm",
+        "tool_id": "send_customer_notification",
+        "params": {
+          "channel": "EMAIL",
+          "order_id": "ORD-10550",
+          "template": "ORDER_UPDATED",
+          "customer_id": "CUST-1006"
+        },
+        "parent_id": "n0",
+        "trigger_type": "AGENT_REACTION",
+        "trigger_event": "ORDER_MODIFIED",
+        "rule_id": "crm.notify_on_modify",
+        "rule_version": 1,
+        "trigger_condition": "ALWAYS",
+        "trigger_reason": "CRM tells the customer their order changed.",
+        "authorization": {
+          "granted": true,
+          "code": null,
+          "message": "Agent crm holds its own permission to call send_customer_notification."
+        },
+        "required": false,
+        "status": "WILL_EXECUTE",
+        "status_code": null,
+        "status_message": null,
+        "summary": "EMAIL ORDER_UPDATED to Ananya Iyer.",
+        "reversibility": "NONE",
+        "customer_impact": "LOW",
+        "data_sensitivity": "PII",
+        "changes": [],
+        "creations": [
+          {
+            "resource_type": "notification",
+            "values": {
+              "channel": "EMAIL",
+              "template": "ORDER_UPDATED",
+              "customer_id": "CUST-1006"
+            }
+          }
+        ],
+        "money": [],
+        "events": []
+      },
+      {
+        "id": "n4",
+        "depth": 2,
+        "agent_id": "crm",
+        "tool_id": "send_customer_notification",
+        "params": {
+          "channel": "EMAIL",
+          "order_id": "ORD-10550",
+          "template": "REFUND_ISSUED",
+          "customer_id": "CUST-1006"
+        },
+        "parent_id": "n2",
+        "trigger_type": "AGENT_REACTION",
+        "trigger_event": "REFUND_ISSUED",
+        "rule_id": "crm.notify_on_refund",
+        "rule_version": 1,
+        "trigger_condition": "ALWAYS",
+        "trigger_reason": "CRM emails the customer about their refund.",
+        "authorization": {
+          "granted": true,
+          "code": null,
+          "message": "Agent crm holds its own permission to call send_customer_notification."
+        },
+        "required": false,
+        "status": "WILL_EXECUTE",
+        "status_code": null,
+        "status_message": null,
+        "summary": "EMAIL REFUND_ISSUED to Ananya Iyer.",
+        "reversibility": "NONE",
+        "customer_impact": "LOW",
+        "data_sensitivity": "PII",
+        "changes": [],
+        "creations": [
+          {
+            "resource_type": "notification",
+            "values": {
+              "channel": "EMAIL",
+              "template": "REFUND_ISSUED",
+              "customer_id": "CUST-1006"
+            }
+          }
+        ],
+        "money": [],
+        "events": []
+      },
+      {
+        "id": "n5",
+        "depth": 2,
+        "agent_id": "crm",
+        "tool_id": "create_customer_case",
+        "params": {
+          "reason": "HIGH_VALUE_REFUND",
+          "order_id": "ORD-10550",
+          "customer_id": "CUST-1006"
+        },
+        "parent_id": "n2",
+        "trigger_type": "AGENT_REACTION",
+        "trigger_event": "REFUND_ISSUED",
+        "rule_id": "crm.case_on_large_refund",
+        "rule_version": 1,
+        "trigger_condition": "AMOUNT_AT_LEAST",
+        "trigger_reason": "CRM opens a review case for refunds of ₹25,000 or more.",
+        "authorization": {
+          "granted": true,
+          "code": null,
+          "message": "Agent crm holds its own permission to call create_customer_case."
+        },
+        "required": false,
+        "status": "WILL_EXECUTE",
+        "status_code": null,
+        "status_message": null,
+        "summary": "Open case HIGH_VALUE_REFUND for Ananya Iyer.",
+        "reversibility": "PARTIAL",
+        "customer_impact": "LOW",
+        "data_sensitivity": "INTERNAL",
+        "changes": [],
+        "creations": [
+          {
+            "resource_type": "customer_case",
+            "values": {
+              "reason": "HIGH_VALUE_REFUND",
+              "order_id": "ORD-10550",
+              "customer_id": "CUST-1006"
+            }
+          }
+        ],
+        "money": [],
+        "events": [
+          {
+            "type": "CASE_OPENED",
+            "payload": {
+              "reason": "HIGH_VALUE_REFUND",
+              "order_id": "ORD-10550",
+              "customer_id": "CUST-1006"
+            }
+          }
+        ]
+      }
+    ],
+    "edges": [
+      {
+        "source": "n0",
+        "target": "n1",
+        "kind": "TRIGGER",
+        "event": "ORDER_MODIFIED",
+        "rule_id": "inventory.release_on_modify",
+        "rule_version": 1
+      },
+      {
+        "source": "n0",
+        "target": "n2",
+        "kind": "TRIGGER",
+        "event": "ORDER_MODIFIED",
+        "rule_id": "finance.refund_on_downsize",
+        "rule_version": 1
+      },
+      {
+        "source": "n0",
+        "target": "n3",
+        "kind": "TRIGGER",
+        "event": "ORDER_MODIFIED",
+        "rule_id": "crm.notify_on_modify",
+        "rule_version": 1
+      },
+      {
+        "source": "n2",
+        "target": "n4",
+        "kind": "TRIGGER",
+        "event": "REFUND_ISSUED",
+        "rule_id": "crm.notify_on_refund",
+        "rule_version": 1
+      },
+      {
+        "source": "n2",
+        "target": "n5",
+        "kind": "TRIGGER",
+        "event": "REFUND_ISSUED",
+        "rule_id": "crm.case_on_large_refund",
+        "rule_version": 1
+      }
+    ],
+    "blast_radius": {
+      "agents_affected": [
+        "crm",
+        "finance",
+        "inventory"
+      ],
+      "agent_count": 3,
+      "downstream_actions": 5,
+      "records_affected": [
+        "order_item:ORD-10550/SKU-LAP-001",
+        "order:ORD-10550",
+        "inventory_item:SKU-LAP-001",
+        "payment:PAY-90550",
+        "refund:new@n2#0",
+        "notification:new@n3#0",
+        "notification:new@n4#0",
+        "customer_case:new@n5#0"
+      ],
+      "record_count": 8,
+      "systems_affected": [
+        "customer_case",
+        "inventory_item",
+        "notification",
+        "order",
+        "order_item",
+        "payment",
+        "refund"
+      ],
+      "money_out": "72000.00",
+      "money_in": "0.00",
+      "net_money_out": "72000.00",
+      "customer_impact": "MEDIUM",
+      "data_sensitivity": "PII",
+      "reversibility": "PARTIAL",
+      "irreversible_nodes": [
+        "n2",
+        "n3",
+        "n4"
+      ],
+      "blocked_nodes": [],
+      "would_fail_nodes": [],
+      "skipped_nodes": []
+    },
+    "direct_effect": {
+      "agents_affected": [],
+      "agent_count": 0,
+      "downstream_actions": 0,
+      "records_affected": [
+        "order_item:ORD-10550/SKU-LAP-001",
+        "order:ORD-10550"
+      ],
+      "record_count": 2,
+      "systems_affected": [
+        "order",
+        "order_item"
+      ],
+      "money_out": "0.00",
+      "money_in": "0.00",
+      "net_money_out": "0.00",
+      "customer_impact": "MEDIUM",
+      "data_sensitivity": "NONE",
+      "reversibility": "FULL",
+      "irreversible_nodes": [],
+      "blocked_nodes": [],
+      "would_fail_nodes": [],
+      "skipped_nodes": []
+    },
+    "fingerprint": "b47d515a5af100bbb6168efadabe80aacb5934fd18c1e2d2d07a5452fcdda601",
+    "reads": [
+      {
+        "resource_type": "customer",
+        "resource_id": "CUST-1006",
+        "version": 1
+      },
+      {
+        "resource_type": "inventory_item",
+        "resource_id": "SKU-LAP-001",
+        "version": 1
+      },
+      {
+        "resource_type": "order",
+        "resource_id": "ORD-10550",
+        "version": 1
+      },
+      {
+        "resource_type": "payment",
+        "resource_id": "PAY-90550",
+        "version": 1
+      }
+    ],
+    "config": {
+      "reaction_rules": [
+        {
+          "id": "crm.case_on_large_refund",
+          "version": 1,
+          "enabled": true,
+          "digest": "ca75e9cf514bcffbb08f537b4f6e4194b2fb6367a099160ae55484007aa02fdd"
+        },
+        {
+          "id": "crm.notify_on_modify",
+          "version": 1,
+          "enabled": true,
+          "digest": "d8c56e4c4c9bf0079cf0fc15cf6433ee67680bae23e93073c2c749d0331a9fff"
+        },
+        {
+          "id": "crm.notify_on_refund",
+          "version": 1,
+          "enabled": true,
+          "digest": "a1c24e3f5e263462d91d6d9625e68b7c66de536492b86b15f239089da8ec937b"
+        },
+        {
+          "id": "finance.refund_on_downsize",
+          "version": 1,
+          "enabled": true,
+          "digest": "e5fb367f2c82e74debdf29f92d70b35c976959dcd5716350647cada6bc642ccc"
+        },
+        {
+          "id": "inventory.release_on_modify",
+          "version": 1,
+          "enabled": true,
+          "digest": "0fce928459ad0d09719a45f7cac8598602ffbc7f093a4fff2623127fb168e3d1"
+        },
+        {
+          "id": "inventory.reserve_on_modify",
+          "version": 1,
+          "enabled": true,
+          "digest": "691762c3264bebdff7ceb347d2411a13764bfa4c57f592b17dd1660dae39fb88"
+        }
+      ],
+      "rules_fingerprint": "2163a6d0ad00931dac07352d10f938d53cc4847569027a87ef07343068ec9a6d",
+      "catalog_fingerprint": "f12623bf5911f27efe11e42fc07ba3bf14d61a544a0a402ca625a3d08525332e"
+    },
+    "execution_order": [
+      "n0",
+      "n1",
+      "n2",
+      "n3",
+      "n4",
+      "n5"
+    ],
+    "blocking": [],
+    "warnings": [],
+    "limit_reached": false,
+    "cycle_detected": false
+  },
+  "risk": {
+    "score": 68,
+    "raw_score": 68,
+    "level": "HIGH",
+    "dimensions": [
+      {
+        "key": "financial",
+        "label": "Financial",
+        "score": "88.8",
+        "weight": "0.35",
+        "contribution": "31.08",
+        "explanation": "₹72,000.00 moves out of NovaCart."
+      },
+      {
+        "key": "irreversibility",
+        "label": "Irreversibility",
+        "score": "50.0",
+        "weight": "0.20",
+        "contribution": "10.00",
+        "explanation": "3 of 6 steps cannot be undone."
+      },
+      {
+        "key": "downstream",
+        "label": "Downstream agents",
+        "score": "75.0",
+        "weight": "0.15",
+        "contribution": "11.25",
+        "explanation": "3 other agents act: crm, finance, inventory."
+      },
+      {
+        "key": "customer",
+        "label": "Customer impact",
+        "score": "50.0",
+        "weight": "0.20",
+        "contribution": "10.00",
+        "explanation": "Highest customer impact: MEDIUM."
+      },
+      {
+        "key": "data",
+        "label": "Data sensitivity",
+        "score": "60.0",
+        "weight": "0.10",
+        "contribution": "6.00",
+        "explanation": "Most sensitive data touched: PII."
+      }
+    ],
+    "reasons": [
+      {
+        "code": "FLOOR_HIGH_VALUE_OUTFLOW",
+        "severity": "INFO",
+        "message": "Outflow above ₹25,000.00 sets the risk level to at least HIGH.",
+        "node_id": null,
+        "details": {
+          "floor": "HIGH",
+          "threshold": "₹25,000.00"
+        }
+      }
+    ],
+    "policy_version": "2026-10-07.1",
+    "policy_fingerprint": "c8e70df8dd23d7faec600cedf8d9497578dab078c1991f2e61a63ba3a08f4ab6",
+    "direct": {
+      "score": 10,
+      "level": "LOW",
+      "decision": "AUTO_APPROVED",
+      "reasons": []
+    }
+  },
+  "decision": {
+    "decision": "APPROVAL_REQUIRED",
+    "reasons": [
+      {
+        "code": "REFUND_ABOVE_AUTO_LIMIT",
+        "severity": "APPROVAL",
+        "message": "₹72,000.00 would leave NovaCart, above the ₹2,000.00 auto-approve limit.",
+        "node_id": null,
+        "details": {
+          "limit": "₹2,000.00",
+          "money_out": "₹72,000.00"
+        }
+      },
+      {
+        "code": "HIGH_RISK",
+        "severity": "APPROVAL",
+        "message": "Risk is HIGH (68/100).",
+        "node_id": null,
+        "details": {
+          "level": "HIGH",
+          "score": 68
+        }
+      },
+      {
+        "code": "FLOOR_HIGH_VALUE_OUTFLOW",
+        "severity": "INFO",
+        "message": "Outflow above ₹25,000.00 sets the risk level to at least HIGH.",
+        "node_id": null,
+        "details": {
+          "floor": "HIGH",
+          "threshold": "₹25,000.00"
+        }
+      }
+    ],
+    "money_out": "72000.00",
+    "policy_version": "2026-10-07.1"
+  },
+  "explanation": {
+    "summary": "Modify order ORD-10550 triggers 5 downstream actions across 3 other agents (crm, finance, inventory) and moves ₹72,000.00 out of NovaCart. Risk is HIGH (68/100), so a human approver must decide.",
+    "bullets": [
+      "₹72,000.00 would leave NovaCart, above the ₹2,000.00 auto-approve limit.",
+      "Risk is HIGH (68/100).",
+      "Outflow above ₹25,000.00 sets the risk level to at least HIGH.",
+      "inventory: Return 1 x SKU-LAP-001 to stock.",
+      "finance: Refund ₹72,000.00 to PAY-90550 (CARD).",
+      "crm: EMAIL ORDER_UPDATED to Ananya Iyer."
+    ],
+    "source": "rules",
+    "rejected_figures": []
+  },
+  "approval": {
+    "status": "APPROVED",
+    "expires_at": "2026-10-08T15:44:46.761914Z",
+    "decided_by": "approver-asha",
+    "decided_at": "2026-10-08T15:14:50.931429Z",
+    "comment": null
+  },
+  "executions": [
+    {
+      "attempt": 1,
+      "status": "SUCCEEDED",
+      "steps": [
+        {
+          "status": "APPLIED",
+          "changes": 2,
+          "created": [],
+          "node_id": "n0",
+          "tool_id": "modify_order",
+          "agent_id": "customer-support",
+          "required": true
+        },
+        {
+          "status": "APPLIED",
+          "changes": 2,
+          "created": [],
+          "node_id": "n1",
+          "tool_id": "release_inventory",
+          "agent_id": "inventory",
+          "required": true
+        },
+        {
+          "status": "APPLIED",
+          "changes": 2,
+          "created": [
+            {
+              "id": "1b2e2b46-d733-49a0-9346-54eaab7f210c",
+              "resource_type": "refund"
+            }
+          ],
+          "node_id": "n2",
+          "tool_id": "issue_refund",
+          "agent_id": "finance",
+          "required": true
+        },
+        {
+          "status": "APPLIED",
+          "changes": 0,
+          "created": [
+            {
+              "id": "f1255c10-6f7a-4f71-b66f-2db7f09e3d44",
+              "resource_type": "notification"
+            }
+          ],
+          "node_id": "n3",
+          "tool_id": "send_customer_notification",
+          "agent_id": "crm",
+          "required": false
+        },
+        {
+          "status": "APPLIED",
+          "changes": 0,
+          "created": [
+            {
+              "id": "344cc457-e275-4c3a-82e2-a37327cf5082",
+              "resource_type": "notification"
+            }
+          ],
+          "node_id": "n4",
+          "tool_id": "send_customer_notification",
+          "agent_id": "crm",
+          "required": false
+        },
+        {
+          "status": "APPLIED",
+          "changes": 0,
+          "created": [
+            {
+              "id": "d382625d-5fac-48a5-b98f-a03f12d9df61",
+              "resource_type": "customer_case"
+            }
+          ],
+          "node_id": "n5",
+          "tool_id": "create_customer_case",
+          "agent_id": "crm",
+          "required": false
+        }
+      ],
+      "error": null,
+      "started_at": "2026-10-08T15:14:53.028904Z",
+      "finished_at": "2026-10-08T15:14:53.068931Z"
+    }
+  ]
+}

@@ -7,11 +7,11 @@ const SOURCE: Record<string, string> = {
 };
 
 /** Clearly labelled as narrative: it explains the decision, it never makes it. */
-export function ExplanationCard({ explanation }: { explanation: Explanation }) {
+export function ExplanationCard({ explanation, label = "Explanation" }: { explanation: Explanation; label?: string }) {
   return (
-    <section aria-label="Explanation" className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
+    <section aria-label={label} className="rounded-xl border border-indigo-500/30 bg-indigo-500/5 p-4">
       <div className="flex items-center justify-between gap-2">
-        <h3 className="text-sm font-semibold uppercase tracking-wider text-indigo-300">Explanation</h3>
+        <h3 className="text-sm font-semibold uppercase tracking-wider text-indigo-300">{label}</h3>
         <span className="text-[11px] text-indigo-300/70">{SOURCE[explanation.source] ?? explanation.source}</span>
       </div>
       <p className="mt-2 text-slate-200">{explanation.summary}</p>

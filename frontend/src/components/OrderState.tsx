@@ -53,16 +53,16 @@ export function OrderState({ orderId, report }: { orderId: string; report: Conse
   if (customer) rows.push({ label: "Customer", before: show(customer.before), preview: show(customer.after), now: show(live?.customer.status) });
 
   return (
-    <section aria-label="Order state" className="rounded-xl border border-slate-800 bg-slate-900/60 p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-slate-400">
-        {orderId} <span className="normal-case tracking-normal text-slate-500">· v{live?.version ?? "…"}</span>
+    <section aria-label="Order state" className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
+      <h3 className="text-sm font-semibold text-slate-300" title={`State version v${live?.version ?? "…"}`}>
+        Order {orderId} <span className="font-normal text-slate-500">· before, simulated after, and live in the database now</span>
       </h3>
       <table className="mt-2 w-full text-sm">
         <thead>
           <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
             <th className="py-1 font-medium" />
             <th className="py-1 font-medium">Before</th>
-            <th className="py-1 font-medium">Preview after</th>
+            <th className="py-1 font-medium">Simulated after</th>
             <th className="py-1 font-medium">Now</th>
           </tr>
         </thead>

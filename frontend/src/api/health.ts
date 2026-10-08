@@ -3,6 +3,8 @@ import { apiFetch } from "./client";
 export interface HealthResponse {
   status: "ok";
   version: string;
+  demo_mode: boolean;
+  public_mode: boolean;
 }
 
 export interface ReadinessResponse {

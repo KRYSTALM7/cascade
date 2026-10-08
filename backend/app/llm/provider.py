@@ -32,7 +32,8 @@ class Narrative:
 
 
 class LLMProvider(Protocol):
-    name: str
+    @property
+    def name(self) -> str: ...
 
     def parse_intent(self, text: str, ctx: ParseContext) -> LLMIntent: ...
 

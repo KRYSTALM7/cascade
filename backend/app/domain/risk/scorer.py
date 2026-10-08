@@ -10,7 +10,7 @@ from typing import Literal
 from pydantic import BaseModel, ConfigDict
 
 from app.domain.consequence.report import ConsequenceReport
-from app.domain.enums import Reversibility, RiskLevel
+from app.domain.enums import Decision, Reversibility, RiskLevel
 from app.domain.money import format_inr
 from app.domain.policy.model import Breakpoint, Policy, max_level
 from app.domain.policy.reasons import PolicyReason, render
@@ -30,6 +30,19 @@ class RiskDimension(BaseModel):
     explanation: str
 
 
+class DirectAssessment(BaseModel):
+    """The proposed action ALONE (root node, no agent reactions), scored and decided by the same
+    engines: what a per-tool permission check would conclude. Shown for contrast, never used to
+    decide the action."""
+
+    model_config = ConfigDict(frozen=True, extra="forbid")
+
+    score: int
+    level: RiskLevel
+    decision: Decision
+    reasons: list[str]  # BLOCK / APPROVAL reason codes for the root alone
+
+
 class RiskAssessment(BaseModel):
     model_config = ConfigDict(frozen=True, extra="forbid")
 
@@ -39,6 +52,8 @@ class RiskAssessment(BaseModel):
     dimensions: list[RiskDimension]
     reasons: list[PolicyReason]  # floors that raised the level
     policy_version: str
+    policy_fingerprint: str = ""  # "" = assessed before fingerprints existed (never matches)
+    direct: DirectAssessment | None = None
 
 
 def financial_score(amount: Decimal, points: list[Breakpoint]) -> Decimal:
@@ -137,4 +152,5 @@ def score_report(report: ConsequenceReport, policy: Policy) -> RiskAssessment:
         dimensions=dimensions,
         reasons=reasons,
         policy_version=policy.version,
+        policy_fingerprint=policy.fingerprint(),
     )

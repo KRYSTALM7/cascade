@@ -4,6 +4,8 @@ from __future__ import annotations
 
 import uuid
 
+from sqlalchemy.orm import Session
+
 from app.core.errors import CascadeError, ErrorCode
 from app.domain.enums import ActionStatus, ActorType, ApprovalStatus, UserRole
 from app.domain.policy.engine import approver_error
@@ -33,6 +35,22 @@ def expire_if_due(ctx: ServiceContext, action: Action) -> bool:
         payload={"expired_at": approval.expires_at.isoformat()},
     )
     return True
+
+
+def _binding(session: Session, action: Action) -> dict[str, str | None]:
+    """What a decision is bound to: the business-state fingerprint and the configuration
+    (policy, reaction rules, agent/tool/permission rows) of the report the approver saw.
+    Execution re-checks every one of these (services/execution.py::stale_reasons)."""
+    outcome = load_outcome(session, action)
+    assert outcome is not None
+    config = outcome.report.config
+    return {
+        "state_fingerprint": outcome.report.fingerprint,
+        "policy_version": outcome.risk.policy_version,
+        "policy_fingerprint": outcome.risk.policy_fingerprint,
+        "rules_fingerprint": config.rules_fingerprint if config else None,
+        "catalog_fingerprint": config.catalog_fingerprint if config else None,
+    }
 
 
 def _expired_error(action: Action) -> CascadeError:
@@ -139,6 +157,6 @@ class ApprovalService:
             action_id=action.id,
             actor_type=ActorType.USER,
             actor_id=user.id,
-            payload={"comment": comment},
+            payload={"comment": comment, "decided_against": _binding(self.session, action)},
         )
         self.session.commit()

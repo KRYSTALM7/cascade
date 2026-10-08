@@ -305,7 +305,8 @@ def test_release_without_holds() -> None:
 
 def test_release_all_holds_of_an_order() -> None:
     effect = run("release_inventory", {"order_id": "ORD-10482"})
-    assert changes(effect)[("inventory_item", "SKU-LAP-001", "reserved")] == (2, 1)
+    # 4 laptops held: ORD-10482 (1), ORD-10540 (1), ORD-10550 (2); releasing ORD-10482 frees one.
+    assert changes(effect)[("inventory_item", "SKU-LAP-001", "reserved")] == (4, 3)
 
 
 def test_restock_unknown_sku() -> None:

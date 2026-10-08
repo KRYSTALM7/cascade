@@ -10,6 +10,7 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, JsonValue
 
 from app.domain.enums import (
+    ConditionKey,
     DataSensitivity,
     DomainEvent,
     ImpactLevel,
@@ -69,6 +70,15 @@ class Reason(_Model):
     details: dict[str, JsonValue] = {}
 
 
+class AuthorizationOut(_Model):
+    """The independent authorization check for ONE node. A downstream agent never inherits the
+    proposer's permission: its own agent/tool/permission rows are checked."""
+
+    granted: bool
+    code: str | None = None  # denial code, e.g. DOWNSTREAM_NOT_PERMITTED
+    message: str
+
+
 class NodeOut(_Model):
     id: str
     depth: int
@@ -80,6 +90,11 @@ class NodeOut(_Model):
     trigger_event: DomainEvent | None
     rule_id: str | None
     rule_version: int | None
+    # Why this agent acted: the rule's condition and declared purpose (None for the root).
+    trigger_condition: ConditionKey | None = None
+    trigger_reason: str | None = None
+    # None = not evaluated (node beyond the cascade limits).
+    authorization: AuthorizationOut | None = None
     required: bool
     status: NodeStatus
     status_code: str | None = None
@@ -113,6 +128,8 @@ class BlastRadius(_Model):
     downstream_actions: int
     records_affected: list[str]
     record_count: int
+    # Distinct kinds of record the cascade writes (order, payment, refund, notification, ...).
+    systems_affected: list[str] = []
     money_out: Decimal
     money_in: Decimal
     net_money_out: Decimal
@@ -131,6 +148,24 @@ class ReadOut(_Model):
     version: int
 
 
+class RuleVersionOut(_Model):
+    """A reaction rule the traversal consulted (fired or not), with a digest of its definition."""
+
+    id: str
+    version: int
+    enabled: bool
+    digest: str
+
+
+class ConfigOut(_Model):
+    """Configuration the simulation depended on. Execution recomputes it and refuses to apply an
+    approval whose rules or agent/tool/permission configuration changed underneath it."""
+
+    reaction_rules: list[RuleVersionOut]
+    rules_fingerprint: str
+    catalog_fingerprint: str  # agents, tools and permissions the authorization checks read
+
+
 class ConsequenceReport(_Model):
     engine_version: str
     proposer_agent_id: str
@@ -138,8 +173,11 @@ class ConsequenceReport(_Model):
     nodes: list[NodeOut]
     edges: list[EdgeOut]
     blast_radius: BlastRadius
+    # The proposed action ALONE (root node only): what a per-tool permission check would see.
+    direct_effect: BlastRadius | None = None
     fingerprint: str
     reads: list[ReadOut]
+    config: ConfigOut | None = None
     execution_order: list[str]
     blocking: list[Reason]
     warnings: list[Reason]
@@ -149,6 +187,24 @@ class ConsequenceReport(_Model):
     @property
     def root(self) -> NodeOut:
         return self.nodes[0]
+
+    def direct_view(self) -> ConsequenceReport:
+        """This report reduced to the root action, as if no agent reacted. Used to show how the
+        proposal looks in isolation; never used to decide."""
+        root = self.root
+        return self.model_copy(
+            update={
+                "nodes": [root],
+                "edges": [],
+                "blast_radius": self.direct_effect or self.blast_radius,
+                "direct_effect": None,
+                "execution_order": [root.id] if root.status is NodeStatus.WILL_EXECUTE else [],
+                "blocking": [b for b in self.blocking if b.node_id == root.id],
+                "warnings": [],
+                "limit_reached": False,
+                "cycle_detected": False,
+            }
+        )
 
     @property
     def is_blocked(self) -> bool:

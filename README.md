@@ -6,7 +6,7 @@ Agents rarely act alone. When a support agent cancels an order, a finance agent 
 
 Cascade sits between an agent's proposed tool call and its execution. It simulates the call against a copy-on-write view of business state, follows every downstream agent reaction it would trigger, and measures the result: money moved, agents involved, records touched and what can be undone. A deterministic risk model and a YAML policy then decide whether the action is blocked, auto-approved, or needs a human with enough authority.
 
-It runs end to end on a seeded e-commerce company, NovaCart, with five agents, fourteen tools and fifteen declared reaction rules. An LLM can turn a sentence into a tool call and narrate the result. It never computes money, permissions, risk, graph structure or approval.
+It runs end to end on a seeded e-commerce company, NovaCart, with five agents, fourteen tools and fifteen declared reaction rules. The [hidden cascade](#the-first-tool-was-allowed-the-problem-was-what-happened-after-it) below is the shortest way to see why it exists. An LLM can turn a sentence into a tool call and narrate the result. It never computes money, permissions, risk, graph structure or approval.
 
 ---
 
@@ -58,9 +58,25 @@ natural-language request
 - **Explicit reaction rules.** Multi-agent behaviour is declared data: "when event E occurs and condition C holds, agent A calls tool T". Every downstream node names the rule and version that created it.
 - **Per-node authorization.** Permissions are checked on every node, not only the first call. An unauthorized downstream step blocks the action at the exact node where it occurs.
 - **Explainable, policy-driven risk.** Five weighted dimensions computed from the blast radius, with thresholds and weights loaded from `policy.yaml`. Every decision comes with stable reason codes and plain sentences.
-- **Stale-state protection.** An approval covers a specific state of the world. If that state changes before execution, nothing is applied and the action needs a fresh simulation and a fresh approval.
+- **Stale-state protection.** An approval covers a specific state of the world *and* the configuration it was decided under: policy content, the reaction rules consulted, and the agent, tool and permission rows checked. If any of them changes before execution, nothing is applied (`STALE_STATE`, `STALE_POLICY_VERSION`, `STALE_REACTION_RULE_VERSION`, `STALE_TOOL_CONFIG`), and the action needs a fresh simulation and a fresh approval.
 - **A constrained LLM boundary.** LLM output is schema-validated, checked against the allowlist and re-validated by the backend. Narratives that cite figures not in the report are thrown away.
 - **Auditability.** Parses, decisions, denials, approvals and executions are written to an insert-only audit log, each with the request id.
+
+## The first tool was allowed. The problem was what happened after it.
+
+The **Hidden cascade** scenario shows the core idea. The customer-support agent proposes:
+
+> "Change the laptop quantity to 1 on ORD-10550, customer only needs one"
+
+| | The action alone (what a permission check sees) | With what happens next (what Cascade sees) |
+|---|---|---|
+| Authorization | ✓ Support may call `modify_order` | Every downstream agent checked on its own permissions |
+| Money out | ₹0.00 | ₹72,000.00 |
+| Other agents | none | finance, inventory, crm (5 downstream actions) |
+| Reversibility | FULL | PARTIAL (refund and emails can't be undone) |
+| Risk · decision | **10 LOW · AUTO_APPROVED** | **68 HIGH · APPROVAL_REQUIRED** |
+
+Both columns come from the same engines and the same policy. The left column is the root node scored alone (`risk.direct`), and the right column is the full cascade. Nobody requested the refund. The edit emits `ORDER_MODIFIED`, the reaction rule `finance.refund_on_downsize@1` (condition `TOTAL_DECREASED`) triggers the **Finance** agent, and Finance proposes `issue_refund ₹72,000.00`. That proposal passes **Finance's own** authorization; Support has no refund permission, and none is inherited. The refund then triggers CRM's case and emails. On screen, the graph marks the root as the only `DIRECT ACTION` and every other node as `AGENT-TRIGGERED`. A "Why it happens" panel spells out each event → rule → agent → proposal → authorization → simulation step. Revoke Finance's permission and the same proposal is `BLOCKED` at the Finance node.
 
 ## A decision through Cascade
 
@@ -130,7 +146,7 @@ When an operator executes the approved action, Cascade:
 
 1. locks the action row and every business row the simulation read
 2. re-simulates the action against the locked, current state
-3. compares the new state fingerprint and graph with the approved preview, and returns `409 STALE_STATE` without applying anything if either differs
+3. compares the new state fingerprint, graph, policy and configuration fingerprints with the approved preview, and returns a `409 STALE_*` error without applying anything if any differ
 4. applies the verified changes step by step, each in its own savepoint, checking every field's expected `before` value
 5. records the execution attempt and the audit events
 
@@ -195,7 +211,7 @@ flowchart TB
 4. **Analyze.** A breadth-first traversal over events and reaction rules builds the consequence graph. Every node is authorized, and the blast radius is measured from the nodes that will execute.
 5. **Decide.** The risk scorer and policy engine produce a score, a level and a decision with reason codes. Authorization failures are hard blocks and are never weighed against risk.
 6. **Approve.** If approval is required, a human with the APPROVER role and a high enough limit, who isn't the proposer, approves or rejects the action before the request expires.
-7. **Revalidate.** At execution, the read rows are locked, the action is re-simulated, and the fingerprint and graph shape are compared with the approved preview.
+7. **Revalidate.** At execution, the read rows are locked, the action is re-simulated, and the business-state fingerprint, graph shape and configuration (policy, reaction rules, agents/tools/permissions) are compared with the approved preview.
 8. **Execute.** **This is the only place business state is written.** Changes are applied in topological order, one savepoint per step.
 9. **Audit.** Every transition is appended to the audit log with the actor, payload and request id.
 
@@ -252,7 +268,7 @@ The backend computes the ₹16,900.00. Neither simulation modifies business stat
 - **Expiry.** A pending approval expires after the `approval_expiry_minutes` set in policy (30). Expiry is checked whenever the action is accessed.
 - **Idempotency.** A repeated approve or execute returns the existing result and nothing is applied twice. A reused idempotency key with a different payload returns `409`.
 - **Execution locks.** The action row and all business rows it read are locked `FOR UPDATE` in a fixed order.
-- **Stale-state detection.** A different fingerprint, a different graph shape, or a newly blocked report returns `409 STALE_STATE`. Re-simulating opens a new approval, because approvals never carry over.
+- **Stale-state detection.** A different business-state fingerprint, graph shape or blocked status returns `409 STALE_STATE`. A changed policy, reaction rule, or agent/tool/permission row returns `409 STALE_POLICY_VERSION`, `STALE_REACTION_RULE_VERSION` or `STALE_TOOL_CONFIG`. The approval's audit entry records what it was bound to. Re-simulating opens a new approval, because approvals never carry over.
 - **Rollback.** If a required step fails, the whole attempt rolls back (`FAILED`, retryable). If an optional step fails, that step and its descendants roll back and the rest is kept (`PARTIALLY_EXECUTED`).
 
 The full mechanics are in [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md#22-approval-model).
@@ -268,7 +284,7 @@ The full mechanics are in [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md#
 - Explicit CORS origins (wildcards are refused at startup), sanitized request ids, and secrets held as `SecretStr` so they never appear in logs or repr output.
 - An insert-only audit log, with no update or delete path in application code.
 
-**Demo authentication.** The caller is identified by an `X-User-Id` header that names a seeded user. POST endpoints reject unknown users. GET endpoints are open. This is a demo identity mechanism, **not production authentication**. Real authentication (OIDC) is listed as post-MVP work in the blueprint. `DEMO_MODE` enables database reset and the Escape Room. Leave it off outside demos.
+**Demo authentication.** The caller is identified by an `X-User-Id` header that names a seeded user. POST endpoints reject unknown users. GET endpoints are open. This is a demo identity mechanism, **not production authentication**, and the UI shows a banner saying so whenever `/healthz` reports `demo_mode: true`. Real authentication (OIDC) is listed as post-MVP work in the blueprint. `DEMO_MODE` enables database reset and the Escape Room. On a public URL, `PUBLIC_MODE` (on by default when `ENVIRONMENT=production`) refuses both with `403 PUBLIC_MODE_RESTRICTED` and hides the API docs. Gemini is opt-in and capped by `LLM_CALL_LIMIT`; past the cap the deterministic rules provider answers. The demo uses synthetic data only. Deployment: [`docs/DEPLOY.md`](docs/DEPLOY.md).
 
 See [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md#33-security-architecture) for the full security architecture.
 
@@ -323,9 +339,9 @@ Demo users, selectable in the header: `ops-ravi` (operator), `approver-asha` (ap
 
 | Suite | Result | Command |
 |---|---|---|
-| Backend (unit, integration, API) | 311 passed | `REQUIRE_DB=1 make test-backend` |
-| Frontend (components, layout, formatting) | 34 passed | `make test-frontend` |
-| Playwright (end-to-end demo flows) | 7 passed | `make e2e` |
+| Backend (unit, integration, API) | 343 passed | `REQUIRE_DB=1 make test-backend` |
+| Frontend (components, layout, formatting) | 78 passed | `make test-frontend` |
+| Playwright (end-to-end demo flows) | 12 passed | `make e2e` |
 
 ```bash
 make check                 # ruff, ruff format, mypy --strict, eslint, tsc, pytest, vitest, build

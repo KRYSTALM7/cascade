@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import logging
+
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -21,16 +23,31 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     settings = settings or get_settings()
     configure_logging(settings.log_level, json_output=settings.log_json)
 
+    public = settings.is_public
     app = FastAPI(
         title=f"{settings.app_name} API",
         version=__version__,
         description="Pre-execution consequence intelligence for AI agents.",
+        # A public instance does not advertise its API surface.
+        docs_url=None if public else "/docs",
+        redoc_url=None if public else "/redoc",
+        openapi_url=None if public else "/openapi.json",
     )
     app.state.settings = settings
     # Fail fast: a malformed policy must refuse to boot, never fail at request time.
     app.state.policy = load_policy(settings.policy_path)
     app.state.llm = build_provider(settings)
     app.state.clock = system_clock
+    if settings.demo_mode:
+        logging.getLogger("cascade").warning(
+            "demo_mode_enabled",
+            extra={
+                "note": "DEMO_MODE=true: X-User-Id demo identities are enabled. Not production "
+                "authentication; never point it at real data.",
+                "public_mode": public,
+                "shared_state_operations": "admin token only" if public else "enabled",
+            },
+        )
 
     app.add_middleware(
         CORSMiddleware,

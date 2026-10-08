@@ -64,4 +64,4 @@ def test_unknown_order_is_404_with_envelope(db_client: TestClient) -> None:
 
 def test_orders_list_is_sorted_and_complete(db_client: TestClient) -> None:
     ids = [o["id"] for o in db_client.get("/api/orders").json()]
-    assert ids == sorted(ids) and len(ids) == 10
+    assert ids == sorted(ids) and len(ids) == 11

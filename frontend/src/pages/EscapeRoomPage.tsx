@@ -4,10 +4,13 @@ import { Link } from "react-router";
 import { api } from "../api/endpoints";
 import type { EscapeResult, EscapeScenario } from "../api/types";
 import { ErrorBanner } from "../components/ErrorBanner";
+import { useDeployment } from "../lib/deployment";
 
 function ScenarioCard({ scenario }: { scenario: EscapeScenario }) {
   const [result, setResult] = useState<EscapeResult | null>(null);
   const run = useMutation({ mutationFn: () => api.runScenario(scenario.id), onSuccess: setResult });
+  // Runs change the shared demo data; a public instance refuses them, so the button is not offered.
+  const { publicMode } = useDeployment();
 
   return (
     <article data-testid={`scenario-${scenario.id}`} className="flex flex-col rounded-xl border border-slate-800 bg-slate-900/60 p-4">
@@ -16,10 +19,11 @@ function ScenarioCard({ scenario }: { scenario: EscapeScenario }) {
         <button
           type="button"
           onClick={() => run.mutate()}
-          disabled={run.isPending}
+          disabled={run.isPending || publicMode}
+          title={publicMode ? "Escape Room runs change shared demo data; available in the presenter environment only." : undefined}
           className="shrink-0 rounded-lg bg-rose-500 px-3 py-1 text-sm font-semibold text-white hover:bg-rose-400 disabled:opacity-50"
         >
-          {run.isPending ? "Attacking…" : "Run attack"}
+          {publicMode ? "Presenter only" : run.isPending ? "Attacking…" : "Run attack"}
         </button>
       </div>
       <p className="mt-2 text-sm text-slate-400">{scenario.attack}</p>
@@ -66,12 +70,16 @@ function ScenarioCard({ scenario }: { scenario: EscapeScenario }) {
 
 export function EscapeRoomPage() {
   const scenarios = useQuery({ queryKey: ["escape-room"], queryFn: api.escapeRoom });
+  const { publicMode } = useDeployment();
   return (
     <div className="space-y-4">
       <div>
         <h2 className="text-xl font-semibold">Escape room</h2>
         <p className="text-sm text-slate-400">
-          Scripted attacks replayed through the normal pipeline — no special engine. Reset the demo to replay scenarios that change orders.
+          Scripted attacks replayed through the normal pipeline — no special engine.{" "}
+          {publicMode
+            ? "Runs change the shared demo data, so on this public demo they are available to the presenter only."
+            : "Reset the demo to replay scenarios that change orders."}
         </p>
       </div>
       {scenarios.error && <ErrorBanner error={scenarios.error} />}

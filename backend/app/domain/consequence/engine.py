@@ -7,19 +7,22 @@ by the rule's agent. Authorization is checked on EVERY node. Nothing here touche
 
 from __future__ import annotations
 
+import hashlib
 from collections import deque
 from collections.abc import Mapping
 from dataclasses import dataclass, field
 from datetime import datetime
 from typing import Any
 
-from app.domain.catalog import Catalog, ReactionDef
+from app.domain.catalog import AgentDef, Catalog, PermissionDef, ReactionDef, ToolDef
 from app.domain.consequence.conditions import CONDITIONS, ConditionConfigError
 from app.domain.consequence.graph import execution_order
 from app.domain.consequence.report import (
     ENGINE_VERSION,
+    AuthorizationOut,
     BlastRadius,
     ChangeOut,
+    ConfigOut,
     ConsequenceReport,
     CreationOut,
     EdgeKind,
@@ -30,6 +33,7 @@ from app.domain.consequence.report import (
     NodeStatus,
     ReadOut,
     Reason,
+    RuleVersionOut,
 )
 from app.domain.enums import (
     DataSensitivity,
@@ -109,22 +113,97 @@ class _Outcome:
     code: str | None = None
     message: str | None = None
     effect: ToolEffect = field(default_factory=ToolEffect)
+    authorization: AuthorizationOut | None = None
 
 
-def _authorize(catalog: Catalog, p: _Pending, now: datetime) -> tuple[str, str] | None:
-    """Hard authorization for one node. Downstream codes are distinct so the UI can say WHERE."""
+def _digest(value: Any) -> str:
+    return hashlib.sha256(canonical_json(value).encode()).hexdigest()
+
+
+@dataclass
+class _ConfigReads:
+    """Configuration the traversal depended on: the agent/tool/permission rows each authorization
+    check read, and every reaction rule consulted for an emitted event (fired or not). Only the
+    fields that change behaviour are digested (names and descriptions are not)."""
+
+    catalog: dict[str, str] = field(default_factory=dict)
+    rules: dict[str, RuleVersionOut] = field(default_factory=dict)
+
+    def agent(self, agent_id: str, agent: AgentDef | None) -> None:
+        self.catalog[f"agent:{agent_id}"] = _digest(None if agent is None else agent.enabled)
+
+    def tool(self, tool_id: str, tool: ToolDef | None) -> None:
+        self.catalog[f"tool:{tool_id}"] = _digest(
+            None
+            if tool is None
+            else [
+                tool.owner_agent_id,
+                tool.enabled,
+                tool.read_only,
+                tool.reversibility,
+                tool.customer_impact,
+                tool.data_sensitivity,
+            ]
+        )
+
+    def permission(self, key: tuple[str, str], permission: PermissionDef | None) -> None:
+        self.catalog[f"permission:{key[0]}/{key[1]}"] = _digest(
+            None
+            if permission is None
+            else ["granted", permission.expires_at and permission.expires_at.isoformat()]
+        )
+
+    def rule(self, rule: ReactionDef) -> None:
+        self.rules[rule.id] = RuleVersionOut(
+            id=rule.id,
+            version=rule.version,
+            enabled=rule.enabled,
+            digest=_digest(
+                [
+                    rule.agent_id,
+                    rule.event_type,
+                    rule.condition_key,
+                    dict(rule.condition_params),
+                    rule.tool_id,
+                    dict(rule.param_mapping),
+                    rule.required,
+                    rule.priority,
+                    rule.enabled,
+                    rule.version,
+                ]
+            ),
+        )
+
+    def out(self) -> ConfigOut:
+        rules = [self.rules[k] for k in sorted(self.rules)]
+        return ConfigOut(
+            reaction_rules=rules,
+            rules_fingerprint=_digest([r.model_dump(mode="json") for r in rules]),
+            catalog_fingerprint=_digest(sorted(self.catalog.items())),
+        )
+
+
+def _authorize(
+    catalog: Catalog, p: _Pending, now: datetime, reads: _ConfigReads
+) -> tuple[str, str] | None:
+    """Hard authorization for one node. Downstream codes are distinct so the UI can say WHERE.
+    Every node is checked against ITS OWN agent's permissions: nothing is inherited from the
+    proposer or from the node that triggered it."""
     pre = "" if p.is_root else "DOWNSTREAM_"
     agent = catalog.agents.get(p.agent_id)
+    reads.agent(p.agent_id, agent)
     if agent is None:
         return ("AGENT_UNKNOWN", f"Agent '{p.agent_id}' does not exist.")
     if not agent.enabled:
         return (f"{pre}AGENT_DISABLED", f"Agent {agent.id} is disabled.")
     tool = catalog.tools.get(p.tool_id)
+    reads.tool(p.tool_id, tool)
     if tool is None or p.tool_id not in SIMULATORS:
         return ("TOOL_UNKNOWN", f"Tool '{p.tool_id}' does not exist.")
     if not tool.enabled:
         return (f"{pre}TOOL_DISABLED", f"Tool {tool.id} is disabled.")
     permission = catalog.permissions.get((agent.id, tool.id))
+    reads.permission((agent.id, tool.id), permission)
     if permission is None:
         code = "TOOL_NOT_PERMITTED" if p.is_root else "DOWNSTREAM_NOT_PERMITTED"
         return (code, f"Agent {agent.id} is not permitted to call {tool.id}.")
@@ -137,10 +216,23 @@ def _authorize(catalog: Catalog, p: _Pending, now: datetime) -> tuple[str, str] 
     return None
 
 
-def _run(catalog: Catalog, p: _Pending, state: SimState, now: datetime) -> _Outcome:
-    denied = _authorize(catalog, p, now)
+def _run(
+    catalog: Catalog, p: _Pending, state: SimState, now: datetime, reads: _ConfigReads
+) -> _Outcome:
+    denied = _authorize(catalog, p, now, reads)
     if denied:
-        return _Outcome(NodeStatus.BLOCKED, *denied)
+        code, message = denied
+        auth = AuthorizationOut(granted=False, code=code, message=message)
+        return _Outcome(NodeStatus.BLOCKED, code, message, authorization=auth)
+    whose = "" if p.is_root else "its own "
+    outcome = _simulate(p, state)
+    outcome.authorization = AuthorizationOut(
+        granted=True, message=f"Agent {p.agent_id} holds {whose}permission to call {p.tool_id}."
+    )
+    return outcome
+
+
+def _simulate(p: _Pending, state: SimState) -> _Outcome:
     if p.error:
         return _Outcome(NodeStatus.WOULD_FAIL, *p.error)
     simulator = SIMULATORS[p.tool_id]
@@ -167,11 +259,17 @@ def _is_ancestor(candidate: str, node: str | None, parents: Mapping[str, str | N
 
 
 def _children(
-    catalog: Catalog, parent_id: str, depth: int, effect: ToolEffect, state: SimState
+    catalog: Catalog,
+    parent_id: str,
+    depth: int,
+    effect: ToolEffect,
+    state: SimState,
+    reads: _ConfigReads,
 ) -> list[_Pending]:
     children: list[_Pending] = []
     for event in effect.events:
         for rule in catalog.reactions_for(event.type):
+            reads.rule(rule)
             if not rule.enabled:
                 continue
             child = _Pending(
@@ -209,6 +307,9 @@ def _node(node_id: str, p: _Pending, outcome: _Outcome, catalog: Catalog) -> Nod
         trigger_event=p.event,
         rule_id=p.rule.id if p.rule else None,
         rule_version=p.rule.version if p.rule else None,
+        trigger_condition=p.rule.condition_key if p.rule else None,
+        trigger_reason=(p.rule.description or None) if p.rule else None,
+        authorization=outcome.authorization,
         required=p.required,
         status=outcome.status,
         status_code=outcome.code,
@@ -260,6 +361,10 @@ def _blast_radius(nodes: list[NodeOut], proposer: str) -> BlastRadius:
             if key not in records:
                 records.append(key)
         records += [f"{c.resource_type}:new@{n.id}#{i}" for i, c in enumerate(n.creations)]
+    systems = sorted(
+        {c.resource_type for n in executing for c in n.changes}
+        | {c.resource_type for n in executing for c in n.creations}
+    )
     money_out = sum((m.amount for n in executing for m in n.money if m.direction == "OUT"), ZERO)
     money_in = sum((m.amount for n in executing for m in n.money if m.direction == "IN"), ZERO)
     return BlastRadius(
@@ -268,6 +373,7 @@ def _blast_radius(nodes: list[NodeOut], proposer: str) -> BlastRadius:
         downstream_actions=len(downstream),
         records_affected=records,
         record_count=len(records),
+        systems_affected=systems,
         money_out=money_out,
         money_in=money_in,
         net_money_out=money_out - money_in,
@@ -309,6 +415,7 @@ def simulate_action(
     warnings: list[Reason] = []
     processed = 0
     limit_reached = cycle_detected = False
+    reads = _ConfigReads()
 
     while queue:
         p = queue.popleft()
@@ -372,12 +479,12 @@ def simulate_action(
         processed += 1
         seen.setdefault(key, node_id)
         parents[node_id] = p.parent_id
-        outcome = _run(catalog, p, state, now)
+        outcome = _run(catalog, p, state, now, reads)
         node = _node(node_id, p, outcome, catalog)
         nodes.append(node)
 
         if outcome.status is NodeStatus.WILL_EXECUTE:
-            queue.extend(_children(catalog, node_id, p.depth, outcome.effect, state))
+            queue.extend(_children(catalog, node_id, p.depth, outcome.effect, state, reads))
             continue
 
         assert outcome.code is not None and outcome.message is not None
@@ -408,11 +515,13 @@ def simulate_action(
         nodes=nodes,
         edges=edges,
         blast_radius=_blast_radius(nodes, agent_id),
+        direct_effect=_blast_radius(nodes[:1], agent_id),
         fingerprint=state.fingerprint(),
         reads=[
             ReadOut(resource_type=r.resource_type, resource_id=r.resource_id, version=r.version)
             for r in state.read_versions()
         ],
+        config=reads.out(),
         execution_order=execution_order(nodes, edges),
         blocking=blocking,
         warnings=warnings,

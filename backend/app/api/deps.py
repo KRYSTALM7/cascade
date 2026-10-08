@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import hmac
 from datetime import UTC, datetime
 from typing import Annotated, cast
 
@@ -65,3 +66,30 @@ def get_current_user(
 
 
 CurrentUser = Annotated[User, Depends(get_current_user)]
+
+
+def require_private_demo(
+    settings: AppSettings,
+    x_demo_admin_token: Annotated[str | None, Header(max_length=256)] = None,
+) -> None:
+    """Operations that change the SHARED demo data for everyone (reset, Escape Room runs) are
+    refused on a public instance unless the caller presents the presenter's admin token.
+    The token travels in a custom header, so a cross-site form/fetch cannot send it."""
+    if not settings.is_public:
+        return
+    expected = settings.demo_admin_token
+    if (
+        expected is not None
+        and x_demo_admin_token is not None
+        and hmac.compare_digest(x_demo_admin_token.encode(), expected.get_secret_value().encode())
+    ):
+        return
+    raise CascadeError(
+        ErrorCode.PUBLIC_MODE_RESTRICTED,
+        "This operation changes the shared demo data and is unavailable on the public demo. "
+        "Use a private presenter environment.",
+        http_status=403,
+    )
+
+
+PrivateDemo = Depends(require_private_demo)

@@ -1,8 +1,9 @@
 import dagre from "@dagrejs/dagre";
 import type { GraphEdge, GraphNode } from "../api/types";
+import { humanEvent } from "../lib/format";
 
 export const NODE_WIDTH = 230;
-export const NODE_HEIGHT = 96;
+export const NODE_HEIGHT = 120;
 
 export interface Positioned {
   node: GraphNode;
@@ -38,7 +39,7 @@ export function nodeMoneyOut(node: GraphNode): string | null {
 export function edgeLabel(edge: GraphEdge): string {
   if (edge.kind === "DUPLICATE") return "duplicate · runs once";
   if (edge.kind === "CYCLE") return "cycle · cut";
-  return edge.event ?? "";
+  return humanEvent(edge.event);
 }
 
 export interface Bounds {

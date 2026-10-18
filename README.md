@@ -56,7 +56,7 @@
 
 > ### Explore the System
 >
-> [Technical design](docs/TECHNICAL_DESIGN.md) · [Deployment guide](docs/DEPLOY.md). A public demo recording is not available yet.
+> [Technical design](docs/TECHNICAL_DESIGN.md) · [Deployment guide](docs/DEPLOY.md) · [Watch the demo video](https://drive.google.com/file/d/1sN-F9TT0Ke0mTdZJRb-CoeltACRN_oip/view?usp=sharing)
 
 ## What Is Cascade?
 
@@ -114,13 +114,15 @@ Nobody requested the refund. Finance proposes it after seeing the order total de
 
 ### Demo Video
 
-The demo video link will be added when a public recording is available.
+▶ **[Watch the demo video](https://drive.google.com/file/d/1sN-F9TT0Ke0mTdZJRb-CoeltACRN_oip/view?usp=sharing)** (about 3 minutes, following docs/DEMO_SCRIPT.md)
 
 ### Live Deployment
 
 [![Open the Cascade live app](https://img.shields.io/badge/Live%20App-Open%20Cascade-34A853?style=for-the-badge&logo=googlecloud)](https://cascade-web-924106425649.asia-south1.run.app/)
 
 The public deployment disables FastAPI's interactive API documentation.
+
+**Companion app:** Mercora (commerce app that calls Cascade): [https://github.com/KRYSTALM7/Mercora](https://github.com/KRYSTALM7/Mercora) · [Live Mercora demo](https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard)
 
 ### Demo Users
 

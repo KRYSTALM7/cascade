@@ -453,17 +453,20 @@ From a simulated cancellation, ask: **“What if we give 20% compensation instea
 
 ## Ecosystem: Mercora
 
-[Mercora](https://github.com/KRYSTALM7/Mercora) is an e-commerce operations app with a Cascade integration for refund consequence simulation. The [live Mercora dashboard](https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard) sends a scoped simulation request to Cascade and displays the returned blast radius, risk assessment, and policy decision. Simulation is read-only: it does not modify the order or issue the refund. Mercora’s direct refund endpoint is disabled and returns **410 Gone**, enforcing the simulate-before-act workflow.
+[Mercora](https://github.com/KRYSTALM7/Mercora) is an e-commerce operations app with a Cascade integration for refund consequence simulation. The [live Mercora dashboard](https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard) sends a scoped simulation request to Cascade and displays the returned blast radius, risk assessment, and policy decision.
+
+Simulation is read-only: it does not modify the order or issue the refund. Mercora’s direct refund endpoint is disabled and returns **410 Gone**, enforcing the simulate-before-act workflow.
 
 ```mermaid
 sequenceDiagram
     actor Operator
     participant M as Mercora
     participant C as Cascade
+
     Operator->>M: Request refund simulation
     M->>C: Simulate proposed refund
-    C-->>M: Consequence graph, blast radius, risk, decision
-    M-->>Operator: Display preview; no refund is executed
+    C-->>M: Return graph, blast radius, risk, and decision
+    M-->>Operator: Display preview without executing refund
 ```
 
 <p align="center"><em>Mercora demonstrates Cascade as a consequence preview service in an e-commerce workflow.</em></p>

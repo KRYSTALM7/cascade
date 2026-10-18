@@ -120,8 +120,6 @@ Nobody requested the refund. Finance proposes it after seeing the order total de
 
 [![Open the Cascade live app](https://img.shields.io/badge/Live%20App-Open%20Cascade-34A853?style=for-the-badge&logo=googlecloud)](https://cascade-web-924106425649.asia-south1.run.app/)
 
-The public deployment disables FastAPI's interactive API documentation.
-
 **Companion app:** Mercora (commerce app that calls Cascade): [https://github.com/KRYSTALM7/Mercora](https://github.com/KRYSTALM7/Mercora) · [Live Mercora demo](https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard)
 
 ### Demo Users
@@ -133,7 +131,7 @@ The public deployment disables FastAPI's interactive API documentation.
 | Dev Patel (`approver-dev`) | Approver · Team Lead | ₹10,000 |
 | Kim Lee (`viewer-kim`) | Viewer · Auditor | — |
 
-Demo identity is selected through the app’s demo identity mechanism; it is **not production authentication**. Do not use demo mode with real business data. A production-mode deployment restricts shared-state reset and Escape Room operations by default.
+Pick any demo user from the header selector to try each role: the operator proposes actions, approvers approve within their limit, and the viewer has read-only access. The live deployment runs in public mode, which keeps the shared demo data safe by turning off database reset and the Escape Room. Sign-in here is for demo purposes only, and production sign-in (OIDC) is on the roadmap.
 
 ## Architecture
 

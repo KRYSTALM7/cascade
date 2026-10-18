@@ -53,13 +53,15 @@ export function OrderState({ orderId, report }: { orderId: string; report: Conse
   if (customer) rows.push({ label: "Customer", before: show(customer.before), preview: show(customer.after), now: show(live?.customer.status) });
 
   return (
-    <section aria-label="Order state" className="rounded-xl border border-slate-800 bg-slate-950/50 p-4">
-      <h3 className="text-sm font-semibold text-slate-300" title={`State version v${live?.version ?? "…"}`}>
-        Order {orderId} <span className="font-normal text-slate-500">· before, simulated after, and live in the database now</span>
+    <section aria-label="Order state" className="rounded-xl border border-slate-200 bg-white p-4">
+      <h3 className="text-sm font-semibold text-slate-900" title={`State version v${live?.version ?? "…"}`}>
+        Order {orderId} <span className="font-normal text-slate-600">· before, simulated after, and live in the database now</span>
       </h3>
-      <table className="mt-2 w-full text-sm">
+
+      {/* Desktop table (md+) */}
+      <table className="mt-2 w-full text-sm hidden md:table">
         <thead>
-          <tr className="text-left text-[11px] uppercase tracking-wider text-slate-500">
+          <tr className="text-left text-[11px] uppercase tracking-wider text-slate-600">
             <th className="py-1 font-medium" />
             <th className="py-1 font-medium">Before</th>
             <th className="py-1 font-medium">Simulated after</th>
@@ -68,17 +70,42 @@ export function OrderState({ orderId, report }: { orderId: string; report: Conse
         </thead>
         <tbody>
           {rows.map((r) => (
-            <tr key={r.label} className="border-t border-slate-800/80">
-              <td className="py-1.5 text-slate-400">{r.label}</td>
-              <td className="py-1.5 font-mono text-slate-300">{r.before}</td>
-              <td className={`py-1.5 font-mono ${r.preview !== r.before ? "text-amber-300" : "text-slate-300"}`}>{r.preview}</td>
-              <td data-testid={`now-${r.label}`} className={`py-1.5 font-mono ${r.now === r.preview && r.preview !== r.before ? "text-emerald-300" : "text-slate-300"}`}>
+            <tr key={r.label} className="border-t border-slate-200">
+              <td className="py-1.5 text-slate-700">{r.label}</td>
+              <td className="py-1.5 font-mono text-slate-700">{r.before}</td>
+              <td className={`py-1.5 font-mono ${r.preview !== r.before ? "text-amber-700" : "text-slate-700"}`}>{r.preview}</td>
+              <td data-testid={`now-${r.label}`} className={`py-1.5 font-mono ${r.now === r.preview && r.preview !== r.before ? "text-emerald-700" : "text-slate-700"}`}>
                 {r.now}
               </td>
             </tr>
           ))}
         </tbody>
       </table>
+
+      {/* Mobile cards (<md) */}
+      <div className="mt-3 space-y-3 md:hidden">
+        {rows.map((r) => (
+          <div key={r.label} className="rounded-lg border border-slate-200 bg-slate-50 p-3">
+            <div className="text-sm font-medium text-slate-900 mb-2">{r.label}</div>
+            <div className="space-y-1.5 text-sm">
+              <div className="flex justify-between">
+                <span className="text-[11px] uppercase tracking-wider text-slate-600">Before</span>
+                <span className="font-mono text-slate-700">{r.before}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[11px] uppercase tracking-wider text-slate-600">After</span>
+                <span className={`font-mono ${r.preview !== r.before ? "text-amber-700" : "text-slate-700"}`}>{r.preview}</span>
+              </div>
+              <div className="flex justify-between">
+                <span className="text-[11px] uppercase tracking-wider text-slate-600">Now</span>
+                <span data-testid={`now-${r.label}`} className={`font-mono ${r.now === r.preview && r.preview !== r.before ? "text-emerald-700" : "text-slate-700"}`}>
+                  {r.now}
+                </span>
+              </div>
+            </div>
+          </div>
+        ))}
+      </div>
     </section>
   );
 }

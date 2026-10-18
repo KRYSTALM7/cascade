@@ -38,8 +38,8 @@ function useDirectory() {
 function Fact({ label, children }: { label: string; children: ReactNode }) {
   return (
     <div className="min-w-0">
-      <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">{label}</dt>
-      <dd className="mt-0.5 text-slate-100">{children}</dd>
+      <dt className="text-[11px] font-semibold uppercase tracking-wider text-slate-600">{label}</dt>
+      <dd className="mt-0.5 text-slate-900">{children}</dd>
     </div>
   );
 }
@@ -101,19 +101,19 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
 
   let title: string;
   let tone: string;
-  let color = "text-slate-100";
+  let color = "text-slate-900";
   let subtitle: ReactNode = null;
   let body: ReactNode = null;
 
   if (pending && !windowClosed) {
     title = "APPROVAL REQUIRED";
-    color = "text-amber-300";
-    tone = "border-amber-400/70 bg-amber-500/[0.07]";
+    color = "text-amber-700";
+    tone = "border-amber-300 bg-amber-50";
     subtitle = "Nothing runs until an authorized human approves.";
     body = (
       <>
-        <dl className="grid gap-4 sm:grid-cols-2 lg:grid-cols-5">
-          <div className="sm:col-span-2">
+        <dl className="grid gap-4 grid-cols-2 min-[360px]:grid-cols-2 md:grid-cols-5">
+          <div className="col-span-2 md:col-span-2">
             <Fact label="Why approval is needed">
               <ul className="space-y-0.5 text-sm">
                 {reasons.map((r, i) => (
@@ -125,11 +125,11 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
             </Fact>
           </div>
           <Fact label="Amount">
-            <span className="text-xl font-bold tabular-nums text-amber-300">{decision ? inrShort(decision.money_out) : "—"}</span>
+            <span className="text-xl font-bold tabular-nums text-amber-700 break-words">{decision ? inrShort(decision.money_out) : "—"}</span>
           </Fact>
           <Fact label="Risk">
             {risk ? (
-              <span className={`text-xl font-bold ${LEVEL_TEXT[risk.level]}`}>
+              <span className={`text-xl font-bold tabular-nums ${LEVEL_TEXT[risk.level]}`}>
                 {risk.level} · {risk.score}/100
               </span>
             ) : (
@@ -137,10 +137,10 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
             )}
           </Fact>
           <Fact label="Expires in">
-            <span data-testid="approval-countdown" className="text-xl font-bold tabular-nums">
+            <span data-testid="approval-countdown" className="text-xl font-bold tabular-nums break-words">
               {approval ? countdown(remaining) : "—"}
             </span>
-            {approval && <span className="block text-xs text-slate-500">at {new Date(approval.expires_at).toLocaleTimeString()}</span>}
+            {approval && <span className="block text-xs text-slate-600 break-words">at {new Date(approval.expires_at).toLocaleTimeString()}</span>}
           </Fact>
         </dl>
         <dl className="mt-4">
@@ -151,19 +151,19 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
           </Fact>
         </dl>
 
-        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-amber-500/20 pt-4">
+        <div className="mt-5 flex flex-wrap items-center gap-3 border-t border-amber-200 pt-4">
           {canDecide ? (
             <>
-              <span className="text-sm text-slate-400">
-                Acting as <span className="font-medium text-slate-100">{directory.name(userId)}</span>
-                {me?.approval_limit && <span className="text-slate-500"> · may approve up to {inr(me.approval_limit)}</span>}
+              <span className="text-sm text-slate-600">
+                Acting as <span className="font-medium text-slate-900">{directory.name(userId)}</span>
+                {me?.approval_limit && <span className="text-slate-600"> · may approve up to {inr(me.approval_limit)}</span>}
               </span>
               <div className="ml-auto flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={busy}
                   onClick={() => mutation.mutate("reject")}
-                  className="rounded-lg border border-rose-500/60 px-5 py-2.5 font-semibold text-rose-200 hover:bg-rose-500/10 disabled:opacity-50"
+                  className="rounded-lg border border-rose-300 px-5 py-2.5 font-semibold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
                 >
                   Reject
                 </button>
@@ -171,7 +171,7 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
                   type="button"
                   disabled={busy}
                   onClick={() => mutation.mutate("approve")}
-                  className="rounded-lg border border-emerald-500/50 px-4 py-2.5 text-sm font-medium text-emerald-200 hover:bg-emerald-500/10 disabled:opacity-50"
+                  className="rounded-lg border border-emerald-300 px-4 py-2.5 text-sm font-medium text-emerald-700 hover:bg-emerald-50 disabled:opacity-50"
                 >
                   Approve only
                 </button>
@@ -179,19 +179,19 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
                   type="button"
                   disabled={busy}
                   onClick={() => mutation.mutate("approve-execute")}
-                  className="rounded-lg bg-emerald-500 px-6 py-2.5 font-semibold text-slate-950 shadow-lg shadow-emerald-500/20 hover:bg-emerald-400 disabled:opacity-50"
+                  className="rounded-lg bg-emerald-600 px-6 py-2.5 font-semibold text-white shadow-lg shadow-emerald-600/20 hover:bg-emerald-700 disabled:opacity-50"
                 >
                   {busy ? "Working…" : "Approve & Execute"}
                 </button>
               </div>
             </>
           ) : (
-            <div data-testid="persona-guide" className="w-full rounded-lg border border-slate-700 bg-slate-950/60 px-4 py-3 text-sm">
-              <p className="text-slate-200">
+            <div data-testid="persona-guide" className="w-full rounded-lg border border-slate-200 bg-slate-50 px-4 py-3 text-sm">
+              <p className="text-slate-900">
                 You&apos;re acting as <span className="font-semibold">{directory.name(userId)}</span>
-                {me && <span className="text-slate-400"> · {ROLE_LABEL[me.role]}</span>}.
+                {me && <span className="text-slate-600"> · {ROLE_LABEL[me.role]}</span>}.
               </p>
-              <p className="mt-0.5 text-slate-400">
+              <p className="mt-0.5 text-slate-700">
                 {me && me.role !== "APPROVER"
                   ? "Approval requires an authorized approver."
                   : "You requested this action, so you cannot approve it yourself. A different approver must decide."}
@@ -207,21 +207,21 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
                   >
                     {again.isPending ? "Proposing…" : `Propose again as ${requesterLabel}`}
                   </button>
-                  <span className="text-xs text-slate-500">then switch back to approve it</span>
+                  <span className="text-xs text-slate-600">then switch back to approve it</span>
                 </div>
               )}
               {otherApprovers.length > 0 && (
-                <div className="mt-3 flex flex-wrap items-center gap-2">
-                  <span className="text-xs text-slate-500">Switch persona:</span>
+                <div className="mt-3 flex flex-col md:flex-row md:flex-wrap md:items-center gap-2">
+                  <span className="text-xs text-slate-600">Switch persona:</span>
                   {otherApprovers.map((u) => (
                     <button
                       key={u.id}
                       type="button"
                       onClick={() => setUserId(u.id)}
-                      className="rounded-lg border border-emerald-500/40 bg-emerald-500/10 px-3 py-1.5 text-sm text-emerald-100 hover:bg-emerald-500/20"
+                      className="w-full md:w-auto min-h-[44px] rounded-lg border border-emerald-300 bg-emerald-50 px-3 py-1.5 text-sm text-emerald-700 hover:bg-emerald-100"
                     >
                       Act as {u.name}
-                      {u.approval_limit && <span className="text-emerald-300/70"> · up to {inrShort(u.approval_limit)}</span>}
+                      {u.approval_limit && <span className="text-emerald-600"> · up to {inrShort(u.approval_limit)}</span>}
                     </button>
                   ))}
                 </div>
@@ -233,34 +233,34 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
     );
   } else if (windowClosed || status === "EXPIRED") {
     title = "APPROVAL EXPIRED";
-    color = "text-orange-300";
-    tone = "border-orange-500/60 bg-orange-500/[0.06]";
+    color = "text-orange-700";
+    tone = "border-orange-300 bg-orange-50";
     subtitle = "Nobody decided within the approval window, so nothing ran. Simulate the same request again for a fresh, current decision.";
     body = <div className="flex gap-2">{resimulate}</div>;
   } else if (status === "REJECTED") {
     title = "REJECTED";
-    color = "text-rose-300";
-    tone = "border-rose-500/50 bg-rose-500/[0.06]";
+    color = "text-rose-700";
+    tone = "border-rose-300 bg-rose-50";
     subtitle = (
       <>
-        Rejected by <span className="font-medium text-slate-100">{directory.name(approval?.decided_by)}</span>. Nothing ran.
+        Rejected by <span className="font-medium text-slate-900">{directory.name(approval?.decided_by)}</span>. Nothing ran.
       </>
     );
     body = (
       <div className="flex flex-wrap items-center gap-3">
         {resimulate}
-        <a href="#step-whatif" className="text-sm text-indigo-300 hover:underline">
+        <a href="#step-whatif" className="text-sm text-indigo-600 hover:underline">
           Look for a safer option ↓
         </a>
       </div>
     );
   } else if (status === "BLOCKED") {
     title = "BLOCKED";
-    color = "text-rose-300";
-    tone = "border-rose-500/60 bg-rose-500/[0.07]";
+    color = "text-rose-700";
+    tone = "border-rose-300 bg-rose-50";
     subtitle = "This action cannot be approved or executed.";
     body = (
-      <ul className="space-y-1 text-sm text-rose-100">
+      <ul className="space-y-1 text-sm text-rose-800">
         {reasons.map((r, i) => (
           <li key={`${r.code}-${i}`} title={r.code}>
             {r.message}
@@ -270,51 +270,51 @@ export function ApprovalGate({ detail, onChange }: { detail: ActionDetail; onCha
     );
   } else if (status === "AUTO_APPROVED") {
     title = "AUTO-APPROVED";
-    color = "text-emerald-300";
-    tone = "border-emerald-500/50 bg-emerald-500/[0.06]";
+    color = "text-emerald-700";
+    tone = "border-emerald-300 bg-emerald-50";
     subtitle = "Within policy limits: no human approval is needed.";
   } else if (status === "APPROVED") {
     title = "APPROVED";
-    color = "text-emerald-300";
-    tone = "border-emerald-500/50 bg-emerald-500/[0.06]";
+    color = "text-emerald-700";
+    tone = "border-emerald-300 bg-emerald-50";
     subtitle = (
       <>
-        Approved by <span className="font-medium text-slate-100">{directory.name(approval?.decided_by)}</span>. Ready to execute.
+        Approved by <span className="font-medium text-slate-900">{directory.name(approval?.decided_by)}</span>. Ready to execute.
       </>
     );
   } else if (status === "EXECUTED" || status === "PARTIALLY_EXECUTED") {
     title = status === "EXECUTED" ? "EXECUTED" : "PARTIALLY EXECUTED";
-    color = status === "EXECUTED" ? "text-emerald-300" : "text-amber-300";
-    tone = "border-emerald-500/50 bg-emerald-500/[0.06]";
+    color = status === "EXECUTED" ? "text-emerald-700" : "text-amber-700";
+    tone = "border-emerald-300 bg-emerald-50";
     subtitle = approval?.decided_by ? (
       <>
-        Approved by <span className="font-medium text-slate-100">{directory.name(approval.decided_by)}</span>, then executed.
+        Approved by <span className="font-medium text-slate-900">{directory.name(approval.decided_by)}</span>, then executed.
       </>
     ) : (
       "Auto-approved, then executed."
     );
   } else if (status === "FAILED") {
     title = "EXECUTION FAILED";
-    color = "text-rose-300";
-    tone = "border-rose-500/50 bg-rose-500/[0.06]";
+    color = "text-rose-700";
+    tone = "border-rose-300 bg-rose-50";
     subtitle = "The execution did not complete. See the steps below; you can retry.";
   } else if (status === "STALE") {
     title = "STALE";
-    color = "text-orange-300";
-    tone = "border-orange-500/60 bg-orange-500/[0.06]";
+    color = "text-orange-700";
+    tone = "border-orange-300 bg-orange-50";
     subtitle = "The data changed since this simulation. Re-simulate above before deciding.";
   } else {
     title = status.replace(/_/g, " ");
-    tone = "border-slate-700 bg-slate-900/60";
+    tone = "border-slate-200 bg-white";
   }
 
   return (
     <section id="step-approval" aria-label="Approval gate" className={`scroll-mt-24 rounded-2xl border-2 p-5 ${tone}`}>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <div className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">Approval gate</div>
+          <div className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-600">Approval gate</div>
           <div className={`text-2xl font-extrabold tracking-wide ${color}`}>{title}</div>
-          {subtitle && <p className="mt-0.5 text-sm text-slate-300">{subtitle}</p>}
+          {subtitle && <p className="mt-0.5 text-sm text-slate-700">{subtitle}</p>}
         </div>
         <StatusBadge status={status} />
       </div>

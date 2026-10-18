@@ -71,11 +71,18 @@ describe("BlastRadius", () => {
   it("states the headline facts first and keeps the rest in details", () => {
     render(<BlastRadius radius={heroDetail.report!.blast_radius} risk={heroDetail.risk!} decision={heroDetail.decision!.decision} />);
     const headline = screen.getByTestId("blast-headline");
-    expect(headline).toHaveTextContent("Agents affected3");
-    expect(headline).toHaveTextContent("Downstream actions5");
-    expect(headline).toHaveTextContent("Exposure₹84,500");
-    expect(headline).toHaveTextContent("RiskHIGH · 76");
-    expect(headline).toHaveTextContent("DecisionApproval required");
+    // Compact grid layout shows values and labels (may be in any visual order)
+    expect(headline).toHaveTextContent("3");
+    expect(headline).toHaveTextContent("Agents");
+    expect(headline).toHaveTextContent("5");
+    expect(headline).toHaveTextContent("Actions");
+    expect(headline).toHaveTextContent("₹84,500");
+    expect(headline).toHaveTextContent("Exposure");
+    expect(headline).toHaveTextContent("HIGH");
+    expect(headline).toHaveTextContent("76");
+    expect(headline).toHaveTextContent("Risk");
+    expect(headline).toHaveTextContent("APPROVAL REQUIRED");
+    expect(headline).toHaveTextContent("Decision");
     const region = screen.getByRole("region", { name: "Blast radius" });
     expect(region).toHaveTextContent("₹84,500.00"); // exact amount in the details
     expect(region).toHaveTextContent("PARTIAL");
@@ -83,7 +90,9 @@ describe("BlastRadius", () => {
 
   it("works with the radius alone", () => {
     render(<BlastRadius radius={heroDetail.report!.blast_radius} />);
-    expect(screen.getByTestId("blast-headline")).toHaveTextContent("Agents affected3");
+    const headline = screen.getByTestId("blast-headline");
+    expect(headline).toHaveTextContent("3");
+    expect(headline).toHaveTextContent("Agents");
     expect(screen.queryByTestId("headline-risk")).not.toBeInTheDocument();
   });
 });

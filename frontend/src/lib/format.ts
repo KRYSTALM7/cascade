@@ -21,30 +21,30 @@ const FALLBACK = { color: "#94a3b8", ring: "ring-slate-400/60", text: "text-slat
 export const agentStyle = (agentId: string) => AGENT_STYLE[agentId] ?? FALLBACK;
 
 export const LEVEL_STYLE: Record<RiskLevel, string> = {
-  LOW: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
-  MEDIUM: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
-  HIGH: "bg-orange-500/15 text-orange-300 ring-orange-500/40",
-  CRITICAL: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
+  LOW: "bg-emerald-50 text-emerald-700 ring-emerald-600/30",
+  MEDIUM: "bg-amber-50 text-amber-700 ring-amber-600/30",
+  HIGH: "bg-orange-50 text-orange-700 ring-orange-600/30",
+  CRITICAL: "bg-rose-50 text-rose-700 ring-rose-600/30",
 };
 
 export const DECISION_STYLE: Record<Decision, { label: string; style: string }> = {
-  AUTO_APPROVED: { label: "Auto-approved", style: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40" },
-  APPROVAL_REQUIRED: { label: "Approval required", style: "bg-amber-500/15 text-amber-300 ring-amber-500/40" },
-  BLOCKED: { label: "Blocked", style: "bg-rose-500/15 text-rose-300 ring-rose-500/40" },
+  AUTO_APPROVED: { label: "Auto-approved", style: "bg-emerald-50 text-emerald-700 ring-emerald-600/30" },
+  APPROVAL_REQUIRED: { label: "Approval required", style: "bg-amber-50 text-amber-700 ring-amber-600/30" },
+  BLOCKED: { label: "Blocked", style: "bg-rose-50 text-rose-700 ring-rose-600/30" },
 };
 
 /** Big-verdict tones for the headline strip, risk block and approval gate. */
 export const LEVEL_TEXT: Record<RiskLevel, string> = {
-  LOW: "text-emerald-300",
-  MEDIUM: "text-amber-300",
-  HIGH: "text-orange-300",
-  CRITICAL: "text-rose-300",
+  LOW: "text-emerald-600",
+  MEDIUM: "text-amber-600",
+  HIGH: "text-orange-600",
+  CRITICAL: "text-rose-600",
 };
 
 export const DECISION_TEXT: Record<Decision, string> = {
-  AUTO_APPROVED: "text-emerald-300",
-  APPROVAL_REQUIRED: "text-amber-300",
-  BLOCKED: "text-rose-300",
+  AUTO_APPROVED: "text-emerald-600",
+  APPROVAL_REQUIRED: "text-amber-600",
+  BLOCKED: "text-rose-600",
 };
 
 export function statusLabel(status: ActionStatus): string {

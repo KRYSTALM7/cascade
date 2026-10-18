@@ -31,9 +31,18 @@ describe("hidden cascade", () => {
       />,
     );
     const headline = screen.getByTestId("blast-headline");
-    for (const text of ["Agents affected3", "Downstream actions5", "Exposure₹72,000", "RiskHIGH · 68", "DecisionApproval required"]) {
-      expect(headline).toHaveTextContent(text);
-    }
+    // Compact grid layout shows values and labels separately
+    expect(headline).toHaveTextContent("3");
+    expect(headline).toHaveTextContent("Agents");
+    expect(headline).toHaveTextContent("5");
+    expect(headline).toHaveTextContent("Actions");
+    expect(headline).toHaveTextContent("₹72,000");
+    expect(headline).toHaveTextContent("Exposure");
+    expect(headline).toHaveTextContent("HIGH");
+    expect(headline).toHaveTextContent("68");
+    expect(headline).toHaveTextContent("Risk");
+    expect(headline).toHaveTextContent("APPROVAL REQUIRED");
+    expect(headline).toHaveTextContent("Decision");
     const contrast = screen.getByTestId("blast-contrast");
     expect(contrast).toHaveTextContent("On its own: looks safe");
     expect(screen.getByTestId("contrast-alone")).toHaveTextContent("LOW·10/100·Auto-approved·₹0");

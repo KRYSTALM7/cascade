@@ -6,12 +6,14 @@
   retried (re-asking until it "looks right" is how hallucinations get laundered).
 - User text is passed as delimited DATA inside a JSON document, never spliced into instructions.
 - Output is untrusted: callers run it through llm/guards.py.
+- API key rotation: Multiple keys can be configured; transient failures rotate to another key.
 """
 
 from __future__ import annotations
 
 import json
 import logging
+import time
 from collections.abc import Callable
 from typing import Any
 
@@ -54,6 +56,12 @@ def is_transient(exc: BaseException) -> bool:
     return isinstance(code, int) and (code == 429 or code >= 500)
 
 
+def is_rate_limit(exc: BaseException) -> bool:
+    """Check if exception is a 429 rate limit error."""
+    code = getattr(exc, "code", None)
+    return isinstance(code, int) and code == 429
+
+
 def sdk_transport(api_key: str, model: str, timeout_seconds: float) -> Transport:
     from google import genai
     from google.genai import types
@@ -78,6 +86,96 @@ def sdk_transport(api_key: str, model: str, timeout_seconds: float) -> Transport
             ),
         )
         return str(response.text or "")
+
+    return call
+
+
+def rotating_transport(
+    api_keys: list[str],
+    model: str,
+    timeout_seconds: float,
+    cooldown_seconds: float = 30.0,
+) -> Transport:
+    """Rotate at most once on 429; timeouts/5xx use GeminiProvider's single retry.
+
+    Keeping key rotation bounded prevents one parse request from multiplying its timeout by
+    every configured key. 429 responses are tried against at most two keys; all other transient
+    failures advance the key for the one retry in GeminiProvider.
+    """
+    from google import genai
+    from google.genai import types
+
+    if not api_keys:
+        raise ValueError("At least one API key required for rotating transport")
+
+    clients = [
+        genai.Client(
+            api_key=key,
+            http_options=types.HttpOptions(
+                timeout=int(timeout_seconds * 1000),
+                retry_options=types.HttpRetryOptions(attempts=1),
+            ),
+        )
+        for key in api_keys
+    ]
+
+    current_key_index = 0
+    cooldown_until = 0.0
+
+    def call(system: str, user: str, schema: dict[str, Any]) -> str:
+        nonlocal current_key_index, cooldown_until
+
+        if time.monotonic() < cooldown_until:
+            raise LLMUnavailableError("Gemini key ring is cooling down")
+
+        keys_tried = 0
+        last_exception = None
+        max_keys_per_call = min(2, len(clients))
+
+        while keys_tried < max_keys_per_call:
+            client = clients[current_key_index]
+            try:
+                response = client.models.generate_content(
+                    model=model,
+                    contents=user,
+                    config=types.GenerateContentConfig(
+                        system_instruction=system,
+                        temperature=0,
+                        response_mime_type="application/json",
+                        response_json_schema=schema,
+                    ),
+                )
+                return str(response.text or "")
+            except Exception as exc:
+                last_exception = exc
+
+                if is_transient(exc):
+                    logger.warning(
+                        "api_key_rate_limited"
+                        if is_rate_limit(exc)
+                        else "api_key_transient_failure",
+                        extra={
+                            "key_index": current_key_index,
+                            "keys_remaining": len(clients) - keys_tried - 1,
+                        },
+                    )
+                    # Try one alternate key for 429s only. Other transient failures get one
+                    # bounded retry from GeminiProvider, on the next key in the ring.
+                    current_key_index = (current_key_index + 1) % len(clients)
+                    keys_tried += 1
+                    if not is_rate_limit(exc):
+                        raise
+                else:
+                    # Non-transient client errors are not helped by another key retry.
+                    raise
+
+        # The small 429 key sample is exhausted; the outer provider uses deterministic rules.
+        cooldown_until = time.monotonic() + cooldown_seconds
+        logger.error(
+            "all_api_keys_exhausted",
+            extra={"keys_tried": keys_tried, "error": type(last_exception).__name__},
+        )
+        raise LLMUnavailableError("All Gemini API keys unavailable") from last_exception
 
     return call
 

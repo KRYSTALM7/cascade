@@ -9,7 +9,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app import __version__
 from app.api.deps import system_clock
-from app.api.routes import actions, audit, catalog, escape_room, health, orders, policy, transcribe
+from app.api.routes import actions, audit, catalog, escape_room, health, orders, policy
 from app.core.config import Settings, get_settings
 from app.core.errors import register_error_handlers
 from app.core.logging import configure_logging
@@ -67,7 +67,6 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.include_router(actions.router)
     app.include_router(audit.router)
     app.include_router(escape_room.router)
-    app.include_router(transcribe.router)
     return app
 
 

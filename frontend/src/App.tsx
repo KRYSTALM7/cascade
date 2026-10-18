@@ -15,7 +15,7 @@ const NAV_ITEMS = [
   { to: "/audit", label: "Audit" },
 ];
 
-const MERCORA_URL = "http://localhost:3000";
+const MERCORA_URL = "https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard";
 
 function UserSwitcher() {
   const { userId, setUserId, setNotice } = useUser();
@@ -116,7 +116,7 @@ export default function App() {
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   return (
-    <div className="min-h-screen overflow-x-hidden" style={{ backgroundColor: '#F8FAFD' }}>
+    <div className="flex min-h-screen flex-col overflow-x-hidden" style={{ backgroundColor: '#F8FAFD' }}>
       <header className="sticky top-0 z-40 border-b border-slate-200 bg-white shadow-sm">
         <div className="mx-auto flex h-16 lg:h-16 max-w-7xl items-center justify-between gap-3 px-4 md:px-6 lg:px-8">
           <NavLink to="/" className="flex items-center gap-2 flex-shrink-0">
@@ -174,7 +174,7 @@ export default function App() {
       
       <MobileNav isOpen={mobileMenuOpen} onClose={() => setMobileMenuOpen(false)} />
 
-      <main className="mx-auto max-w-7xl px-4 md:px-6 lg:px-8">
+      <main className="flex-1 mx-auto w-full max-w-7xl px-4 md:px-6 lg:px-8">
         <Suspense fallback={<div className="flex min-h-[400px] items-center justify-center"><p className="text-slate-500">Loading…</p></div>}>
           <Routes>
             <Route path="/" element={<LandingPage />} />
@@ -187,7 +187,7 @@ export default function App() {
         </Suspense>
       </main>
 
-      <footer className="mt-16 border-t border-slate-200 bg-white">
+      <footer className="border-t border-slate-200 bg-white mt-auto">
         <div className="mx-auto max-w-7xl px-4 py-6 md:px-6 lg:px-8">
           <div className="flex flex-col items-center justify-between gap-4 sm:flex-row">
             <div className="text-center sm:text-left">

@@ -20,7 +20,7 @@ const IMPACT_CARDS: ImpactCard[] = [
     incident:
       "The Register reported in April 2026 that an AI coding agent deleted PocketOS's production database and volume-level backups through an API call to Railway, disrupting customer operations.",
     source:
-      "https://www.theregister.com/software/2026/04/27/cursor-opus-agent-snuffs-out-startups-production-database/",
+      "https://www.theregister.com/software/2026/04/27/cursor-opus-agent-snuffs-out-startups-production-database/5224442?td=keepreading",
     capability:
       "Simulate downstream consequences before execution, identify critical resources and dependencies at risk, and apply configured risk policies to destructive actions.",
   },
@@ -29,7 +29,7 @@ const IMPACT_CARDS: ImpactCard[] = [
     incident:
       "The Register reported on GhostApproval, a vulnerability affecting AI coding assistants that could undermine intended sandbox boundaries.",
     source:
-      "https://www.theregister.com/security/2026/07/08/bug-in-top-ai-coding-agents-shows-that-unix-era-security-headaches-never-really-die/",
+      "https://www.theregister.com/security/2026/07/08/bug-in-top-ai-coding-agents-shows-that-unix-era-security-headaches-never-really-die/5268025?trk=article-ssr-frontend-pulse_little-text-block",
     capability:
       "Bind approval to the exact proposed action and relevant state/configuration, then revalidate and re-simulate before execution. Reject stale or changed proposals according to the existing implementation.",
   },

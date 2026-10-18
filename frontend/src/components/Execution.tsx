@@ -17,14 +17,14 @@ function Step({ step }: { step: ExecutionStep }) {
       title={`${step.tool_id} · ${step.status.toLowerCase()}${step.error ? ` · ${step.error}` : ""}`}
       className="flex items-baseline gap-2 text-sm"
     >
-      <span aria-hidden className={applied ? "text-emerald-300" : failed ? "text-rose-300" : "text-slate-500"}>
+      <span aria-hidden className={applied ? "text-emerald-700" : failed ? "text-rose-700" : "text-slate-400"}>
         {applied ? "✓" : failed ? "✗" : "–"}
       </span>
-      <span className={applied ? "text-slate-100" : failed ? "text-rose-200" : "text-slate-400"}>
+      <span className={applied ? "text-slate-900" : failed ? "text-rose-800" : "text-slate-600"}>
         {applied ? doneText(step.tool_id) : `${toolTitle(step.tool_id)} ${failed ? "failed" : "skipped"}`}
       </span>
-      <span className="text-xs text-slate-500">{agentName(step.agent_id)}</span>
-      {step.error && <span className="text-xs text-rose-300">{step.error}</span>}
+      <span className="text-xs text-slate-600">{agentName(step.agent_id)}</span>
+      {step.error && <span className="text-xs text-rose-700">{step.error}</span>}
     </li>
   );
 }
@@ -39,12 +39,12 @@ export function Execution({ detail }: { detail: ActionDetail }) {
   const executed = action.status === "EXECUTED" || action.status === "PARTIALLY_EXECUTED";
 
   return (
-    <section id="step-execution" aria-label="Execution" className="scroll-mt-24 space-y-3 rounded-2xl border border-slate-800 bg-slate-900/60 p-5">
-      <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-400">Execution</div>
+    <section id="step-execution" aria-label="Execution" className="scroll-mt-24 space-y-4 rounded-2xl border border-slate-200 bg-white p-5 shadow-sm">
+      <div className="flex flex-col md:flex-row md:items-baseline md:justify-between gap-2">
+        <div className="text-xs font-semibold uppercase tracking-[0.15em] text-slate-500">Execution</div>
         {execution && (
-          <span className="text-xs text-slate-500">
-            Attempt {execution.attempt}: <span className="font-medium text-slate-200">{execution.status}</span>
+          <span className="text-xs text-slate-600">
+            Attempt {execution.attempt}: <span className="font-medium text-slate-900">{execution.status}</span>
           </span>
         )}
       </div>
@@ -56,14 +56,19 @@ export function Execution({ detail }: { detail: ActionDetail }) {
               <Step key={s.node_id} step={s} />
             ))}
           </ol>
-          {execution.error && <p className="text-sm text-rose-300">{execution.error.message}</p>}
+          {execution.error && <p className="text-sm text-rose-700">{execution.error.message}</p>}
         </>
       ) : (
-        <p data-testid="nothing-ran" className="text-slate-300">
-          {WILL_NOT_RUN.has(action.status)
-            ? "Nothing will run. NovaCart's data is unchanged."
-            : "Nothing has run yet. Cascade has only simulated — NovaCart's data is unchanged."}
-        </p>
+        <>
+          <div className="flex flex-col md:flex-row md:items-center gap-2">
+            <p data-testid="nothing-ran" className="text-slate-900">
+              {WILL_NOT_RUN.has(action.status)
+                ? "Nothing will run. NovaCart's data is unchanged."
+                : "Nothing has run yet. Cascade has only simulated — NovaCart's data is unchanged."}
+            </p>
+            <span className="rounded-full bg-emerald-50 px-3 py-1 text-xs font-medium text-emerald-800 self-start md:self-center">Simulation only. No changes made</span>
+          </div>
+        </>
       )}
 
       {orderId && report && <OrderState orderId={orderId} report={report} />}
@@ -74,12 +79,12 @@ export function Execution({ detail }: { detail: ActionDetail }) {
             type="button"
             onClick={() => reset.mutate(action)}
             disabled={reset.isPending}
-            className="rounded-lg border border-slate-600 px-3 py-1.5 text-slate-200 hover:border-slate-400 disabled:opacity-50"
+            className="rounded-lg border border-slate-300 px-3 py-1.5 text-slate-700 hover:border-slate-400 hover:bg-slate-50 min-h-[44px]"
           >
-            {reset.isPending ? "Resetting…" : "Reset demo data & run this again"}
+            {reset.isPending ? "Resetting…" : "Reset & run this again"}
           </button>
         )}
-        <Link to="/audit" className="text-sky-300 hover:underline">
+        <Link to="/audit" className="font-medium text-indigo-600 hover:underline min-h-[44px] inline-flex items-center">
           View the audit trail →
         </Link>
       </div>

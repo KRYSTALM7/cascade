@@ -1,373 +1,723 @@
-# Cascade
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Cascade logo" width="140" />
+</p>
 
-**See what an AI agent's action will set off before it runs, then let policy and a human decide.**
+<h1 align="center">Cascade</h1>
 
-Agents rarely act alone. When a support agent cancels an order, a finance agent refunds it, an inventory agent releases stock and a CRM agent emails the customer. Each of those steps may be allowed on its own, and the combined result can still be one nobody approved.
+<p align="center"><strong>See what an AI agent’s action will set off before it runs. Then let policy and a human decide.</strong></p>
 
-Cascade sits between an agent's proposed tool call and its execution. It simulates the call against a copy-on-write view of business state, follows every downstream agent reaction it would trigger, and measures the result: money moved, agents involved, records touched and what can be undone. A deterministic risk model and a YAML policy then decide whether the action is blocked, auto-approved, or needs a human with enough authority.
+<p align="center">
+  <a href="https://ai.google.dev/"><img src="https://img.shields.io/badge/Google%20AI-Builder%20Cup%202026-4285F4?style=for-the-badge&logo=google" alt="Google AI Builder Cup 2026"></a>
+  <a href="https://www.python.org/"><img src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=for-the-badge&logo=python&logoColor=white" alt="Python 3.11 or newer"></a>
+  <a href="https://fastapi.tiangolo.com/"><img src="https://img.shields.io/badge/FastAPI-0.115%2B-009688?style=for-the-badge&logo=fastapi" alt="FastAPI"></a>
+  <a href="https://react.dev/"><img src="https://img.shields.io/badge/React-19-61DAFB?style=for-the-badge&logo=react&logoColor=black" alt="React 19"></a>
+  <a href="https://www.postgresql.org/"><img src="https://img.shields.io/badge/PostgreSQL-16-4169E1?style=for-the-badge&logo=postgresql&logoColor=white" alt="PostgreSQL 16"></a>
+  <a href="https://ai.google.dev/gemini-api"><img src="https://img.shields.io/badge/Gemini-Optional%20LLM-8E75B2?style=for-the-badge&logo=googlegemini" alt="Optional Gemini integration"></a>
+  <a href="docs/DEPLOY.md"><img src="https://img.shields.io/badge/Google%20Cloud-Cloud%20Run-4285F4?style=for-the-badge&logo=googlecloud" alt="Cloud Run deployment guide"></a>
+  <a href="https://www.docker.com/"><img src="https://img.shields.io/badge/Docker-Compose-2496ED?style=for-the-badge&logo=docker&logoColor=white" alt="Docker Compose"></a>
+  <a href="frontend/package.json"><img src="https://img.shields.io/badge/Frontend%20Tests-Vitest-34A853?style=for-the-badge" alt="Vitest frontend tests"></a>
+</p>
 
-It runs end to end on a seeded e-commerce company, NovaCart, with five agents, fourteen tools and fifteen declared reaction rules. The [hidden cascade](#the-first-tool-was-allowed-the-problem-was-what-happened-after-it) below is the shortest way to see why it exists. An LLM can turn a sentence into a tool call and narrate the result. It never computes money, permissions, risk, graph structure or approval.
+<p align="center">
+  <a href="#demo">Demo</a> ·
+  <a href="#architecture">Architecture</a> ·
+  <a href="#getting-started">Quick Start</a> ·
+  <a href="#documentation">Docs</a> ·
+  <a href="#team">Team</a>
+</p>
 
----
+<p align="center">
+  <img src="docs/assets/banner.png" alt="Cascade previews consequences across support, finance, CRM, and inventory agents" width="900" />
+</p>
+<p align="center"><em>One permitted tool call can trigger a chain of agent actions. Cascade previews the chain first.</em></p>
 
-## The problem
+<details>
+<summary><b>Table of Contents</b></summary>
 
-Agent permission systems usually answer one question:
+- [What Is Cascade?](#what-is-cascade)
+- [What Makes It Different](#what-makes-it-different)
+- [The Hidden Cascade](#the-hidden-cascade)
+- [Demo](#demo)
+- [Architecture](#architecture)
+- [Google Cloud and Gemini Implementation](#google-cloud-and-gemini-implementation)
+- [The Consequence Pipeline](#the-consequence-pipeline)
+- [A Decision Through Cascade](#a-decision-through-cascade)
+- [Determinism and Safety](#determinism-and-safety)
+- [What-If Analysis, Human Approval, and Security](#what-if-analysis-human-approval-and-security)
+- [Ecosystem: Mercora](#ecosystem-mercora)
+- [Tech Stack](#tech-stack)
+- [Getting Started](#getting-started)
+- [Reproducible Testing](#reproducible-testing)
+- [Repository Layout](#repository-layout)
+- [Documentation](#documentation)
+- [Team](#team)
 
-> Can Agent A call Tool B?
+</details>
 
-That question misses most of the risk. The question that matters is:
+> ### Explore the System
+>
+> [Technical design](docs/TECHNICAL_DESIGN.md) · [Deployment guide](docs/DEPLOY.md). A public demo recording is not available yet.
 
-> What happens if Agent A calls Tool B **with these exact parameters**, right now?
+## What Is Cascade?
 
-A tool allowlist can't see:
+Agent permission systems usually answer: **Can Agent A call Tool B?** That check misses the risk that matters: what happens when the tool runs with these exact parameters, against the current state, and other agents react?
 
-- **downstream actions**, the other agents that react to what this one did
-- **money movement**, how much leaves the business across the whole chain
-- **inventory and record changes** several steps away from the original call
-- **customer impact**, such as emails, cases and status changes
-- **irreversible effects** mixed in with reversible ones
-- **cascading behaviour**, including loops and duplicate work between agents
+Cascade sits between a proposed tool call and execution. It simulates the action against a copy-on-write view of business state, follows enabled event-to-agent reaction rules, and measures the full blast radius: money movement, agents involved, records touched, customer impact, data sensitivity, and reversibility.
 
-## The solution
+The result is an explainable consequence graph, a deterministic risk assessment, and a policy decision: `BLOCKED`, `APPROVAL_REQUIRED`, or `AUTO_APPROVED`. Simulation does not modify business state. When an action is approved, Cascade revalidates the preview against current state and configuration before applying it. This is a consequence control point, not a chatbot: Gemini can help parse or explain, but it does not compute money, permissions, risk, graph structure, or approval.
 
-Cascade adds a consequence step between *proposed* and *executed*:
+**Seeded demo scope:** 5 agents · 14 tools · 15 reaction rules.
 
+[Back to top](#cascade)
+
+## What Makes It Different
+
+| Capability | Description |
+|---|---|
+| Full consequence graph | Breadth-first traversal follows emitted events through enabled reaction rules, including downstream agent tool calls. |
+| Preview shares execution simulators | Each tool has one deterministic simulator used to derive preview effects and execution changes. |
+| Per-node authorization | Every downstream agent and tool is checked against its own permission. An unauthorized node blocks the action at that node. |
+| Measured blast radius | Money, downstream actions, agents, record changes, reversibility, customer impact, and data sensitivity come from simulated effects. |
+| Policy-driven decisions | Five weighted risk dimensions, configured in YAML, produce a score, reasons, and a policy decision. Authorization failures remain hard blocks. |
+| Approval tied to what was reviewed | Execution locks read rows and re-simulates. State, policy, reaction rules, and relevant tool/permission configuration must still match. |
+| Constrained LLM boundary | Rules-based parsing is the default. Optional Gemini output is schema-validated and guarded; it cannot override deterministic decisions. |
+| Alternatives and audit | What-if actions are simulated independently. Parse, decisions, approvals, denials, and execution are written to an append-only audit log. |
+
+<details>
+<summary><b>Design principles</b></summary>
+
+- **Determinism:** the same input and configuration produce the same report and fingerprint.
+- **Copy-on-write state:** downstream steps see earlier simulated effects while business rows stay untouched during preview.
+- **Declared behavior:** reaction rules state which agent reacts to which event and which tool it calls.
+- **Stale-state protection:** approvals bind to the business state and configuration used by the preview.
+- **Explainability:** the graph records event, rule, agent, tool, authorization result, and simulation step.
+- **Auditable control:** identity comes from the request context; every lifecycle transition is attributable by actor and request ID.
+
+</details>
+
+[Back to top](#cascade)
+
+## The Hidden Cascade
+
+The seeded NovaCart scenario starts with a simple request: **reduce the laptop quantity from two to one on `ORD-10550`**. Support is allowed to modify the order. That edit emits `ORDER_MODIFIED`; the Finance agent independently proposes a ₹72,000 refund under its own `finance.refund_on_downsize` reaction rule. The refund then triggers CRM actions. The permitted root action is reversible; the full consequence graph includes irreversible money movement and customer effects.
+
+| Measure | Root action alone | Full consequence graph |
+|---|---:|---:|
+| Authorization | Support may call `modify_order` | Every triggered agent/tool checked on its own permission |
+| Money out | ₹0 | ₹72,000 |
+| Downstream actions | 0 | 5 |
+| Other agents | 0 | Finance, Inventory, CRM |
+| Reversibility | Full | Partial |
+| Risk and decision | 10 · LOW · `AUTO_APPROVED` | 68 · HIGH · `APPROVAL_REQUIRED` |
+
+Nobody requested the refund. Finance proposes it after seeing the order total decrease. Cascade displays the original call as the direct action and the later calls as agent-triggered nodes, with the reaction rule behind each edge. If Finance lacks refund permission, the same flow is blocked at the Finance node.
+
+<p align="center"><img src="docs/assets/banner.png" alt="Cascade previews downstream agent consequences" width="760"></p>
+<p align="center"><em>A permitted order edit can trigger downstream finance, CRM, and inventory actions.</em></p>
+
+[Back to top](#cascade)
+
+## Demo
+
+### Demo Video
+
+The demo video link will be added when a public recording is available.
+
+### Live Deployment
+
+[![Open the Cascade live app](https://img.shields.io/badge/Live%20App-Open%20Cascade-34A853?style=for-the-badge&logo=googlecloud)](https://cascade-web-924106425649.asia-south1.run.app/)
+
+The public deployment disables FastAPI's interactive API documentation.
+
+### Demo Users
+
+| Demo user | Role | Approval limit |
+|---|---|---:|
+| Ravi Kumar (`ops-ravi`) | Operator · Support Ops | — |
+| Asha Menon (`approver-asha`) | Approver · Finance Lead | ₹100,000 |
+| Dev Patel (`approver-dev`) | Approver · Team Lead | ₹10,000 |
+| Kim Lee (`viewer-kim`) | Viewer · Auditor | — |
+
+Demo identity is selected through the app’s demo identity mechanism; it is **not production authentication**. Do not use demo mode with real business data. A production-mode deployment restricts shared-state reset and Escape Room operations by default.
+
+[Back to top](#cascade)
+
+## Architecture
+
+```mermaid
+flowchart TD
+    USER["Operator"] --> UI["React 19<br/>TypeScript + Vite"]
+    UI -->|"HTTP / JSON"| API["FastAPI"]
+
+    API --> APP["Application services"]
+    APP --> PARSE["Parse + clarify"]
+    APP --> SIM["Simulate + what-if"]
+    APP --> APPROVAL["Approval + execute"]
+    APP --> AUDIT["Audit + catalog"]
+
+    SIM --> TOOLS["Tool simulators<br/>copy-on-write state"]
+    TOOLS --> ENGINE["Consequence engine<br/>event → reaction rule"]
+    ENGINE --> GRAPH["NetworkX helpers"]
+    GRAPH --> RISK["Risk scorer + YAML policy"]
+    APPROVAL --> REPO["SQLAlchemy repositories"]
+    SIM --> REPO
+    AUDIT --> REPO
+    REPO --> DB[("PostgreSQL")]
+
+    PARSE -. optional .-> GUARD["LLM schema + output guards"]
+    SIM -. optional narrative .-> GUARD
+    GUARD --> GEMINI["Gemini API<br/>configured model"]
+    PARSE -. default / fallback .-> RULES["Deterministic rules provider"]
+
+    CLOUD["Google Cloud deployment"] -. hosts .-> API
+    CLOUD -. hosts .-> UI
+    CLOUD -. managed database .-> DB
 ```
-natural-language request
-  → structured tool call            (rules parser or Gemini; untrusted)
-  → validation and clarification     (schema, allowlist, entity checks; never guesses)
-  → deterministic simulation         (copy-on-write overlay; the database is not written)
-  → consequence graph                (event → agent reaction rule → tool, authorized per node)
-  → blast radius                     (measured facts)
-  → risk score                       (documented formula over the blast radius)
-  → policy decision                  (BLOCKED · APPROVAL_REQUIRED · AUTO_APPROVED)
-  → human approval, when required    (role, limit, no self-approval, expiry)
-  → revalidation                     (row locks, re-simulation, fingerprint and graph comparison)
-  → execution                        (the verified changes, one savepoint per step)
-  → audit                            (every step, with request ids)
-```
 
-**Simulation is not execution.** Simulating reads business state and writes only governance records: the action, its immutable report, the risk assessment and audit entries. Orders, payments, inventory and customers change only during execution, and only after an auto-approval or a human approval.
+| Layer | Responsibility |
+|---|---|
+| Frontend | React SPA for simulation, graph, blast radius, risk, approvals, what-if, and audit. It renders backend results. |
+| API | FastAPI routes, request identity/context, response schemas, request IDs, and error handling. |
+| Services | Coordinate parsing, validation, simulation, policy, persistence, approvals, execution, and audit. |
+| Domain | Deterministic simulators, copy-on-write state, consequence traversal, risk scoring, policy, and clarification. |
+| LLM adapter | Optional Gemini and default rules provider behind schemas, allowlists, budgets, and output guards. |
+| Repositories and database | SQLAlchemy loads snapshots, locks relevant rows, applies verified changes, and persists reports and audit records in PostgreSQL. |
 
-## Why Cascade is different
+<details>
+<summary><b>FastAPI route groups</b></summary>
 
-- **Deterministic consequence simulation.** The same input always produces the same report and fingerprint, down to the byte. The graph explains the decision, so nothing has to be reconstructed after the fact.
-- **One implementation per tool.** Each tool has one simulator. Preview and execution both use it, so the preview can't drift away from what actually runs.
-- **Copy-on-write world state.** Simulators read through an overlay on an immutable snapshot. Later steps see the effects of earlier ones, and the database isn't touched.
-- **Explicit reaction rules.** Multi-agent behaviour is declared data: "when event E occurs and condition C holds, agent A calls tool T". Every downstream node names the rule and version that created it.
-- **Per-node authorization.** Permissions are checked on every node, not only the first call. An unauthorized downstream step blocks the action at the exact node where it occurs.
-- **Explainable, policy-driven risk.** Five weighted dimensions computed from the blast radius, with thresholds and weights loaded from `policy.yaml`. Every decision comes with stable reason codes and plain sentences.
-- **Stale-state protection.** An approval covers a specific state of the world *and* the configuration it was decided under: policy content, the reaction rules consulted, and the agent, tool and permission rows checked. If any of them changes before execution, nothing is applied (`STALE_STATE`, `STALE_POLICY_VERSION`, `STALE_REACTION_RULE_VERSION`, `STALE_TOOL_CONFIG`), and the action needs a fresh simulation and a fresh approval.
-- **A constrained LLM boundary.** LLM output is schema-validated, checked against the allowlist and re-validated by the backend. Narratives that cite figures not in the report are thrown away.
-- **Auditability.** Parses, decisions, denials, approvals and executions are written to an insert-only audit log, each with the request id.
+| Routes | Purpose |
+|---|---|
+| `GET /healthz`, `GET /readyz` | Liveness and database readiness |
+| `GET /api/agents`, `GET /api/agents/{agent_id}`, `GET /api/tools`, `GET /api/reactions` | Agents, tools, permissions, and reaction rules |
+| `GET /api/orders`, `GET /api/orders/{order_id}`, `GET /api/policy` | Demo business state and active policy |
+| `POST /api/actions/parse`, `POST /api/actions/simulate` | Parse a request or simulate a structured proposal |
+| `POST /api/actions/{action_id}/clarify`, `POST /api/actions/{action_id}/what-if`, `POST /api/actions/{action_id}/approve`, `POST /api/actions/{action_id}/reject`, `POST /api/actions/{action_id}/execute` | Action clarification, alternative, approval, rejection, and execution |
+| `GET /api/actions`, `GET /api/actions/{action_id}`, `GET /api/actions/{action_id}/consequences`, `GET /api/actions/{action_id}/audit` | Action detail, consequence report, and audit |
+| `GET /api/audit`, `GET /api/users` | Global audit and demo identities |
+| `GET /api/escape-room`, `POST /api/escape-room/{scenario_id}/run` | List/run demo adversarial scenarios; run is restricted in public mode |
+| `POST /api/demo/reset` | Reset and reseed the demo dataset; restricted in public mode |
 
-## The first tool was allowed. The problem was what happened after it.
+</details>
 
-The **Hidden cascade** scenario shows the core idea. The customer-support agent proposes:
+| PostgreSQL model group | Representative records |
+|---|---|
+| Catalog | Agents, tools, agent permissions, reaction rules, demo users |
+| Business state | Customers, orders, order items, payments, inventory, refunds, restock requests, customer cases, notifications |
+| Governance | Actions, consequence reports, risk assessments, approvals, execution attempts, append-only audit log |
 
-> "Change the laptop quantity to 1 on ORD-10550, customer only needs one"
+Alembic has three revisions: baseline, domain model, and action explanation/report fields.
 
-| | The action alone (what a permission check sees) | With what happens next (what Cascade sees) |
+**Reading the diagram:** the browser submits a proposed action to FastAPI. Services invoke the deterministic domain, which simulates the root tool and traverses the consequence graph from declared reaction rules. The policy engine computes risk and the decision. Only after approval where required does execution lock rows, re-simulate, compare fingerprints, and apply the verified changes. Gemini is an optional input and explanation aid. The app is a modular monolith; there is no queue, microservice mesh, or graph database.
+
+[Back to top](#cascade)
+
+## Google Cloud and Gemini Implementation
+
+### Gemini Usage
+
+| Model | Where used | Purpose | Access method |
+|---|---|---|---|
+| `gemini-3.8-flash` (configurable) | Intent parsing, what-if interpretation, explanation | Return structured tool intent or a constrained narrative from precomputed facts | Official `google-genai` Python SDK `models.generate_content` |
+
+`gemini-3.8-flash` is the application default in `backend/app/core/config.py`; `GEMINI_MODEL` can select a different model. Requests use JSON MIME type and a Pydantic-derived JSON schema at temperature `0`. Outputs are untrusted and pass through schema, tool allowlist, parameter, and unsupported-figure guards. Invalid model output is not repeatedly re-asked.
+
+`LLM_CALL_LIMIT` caps Gemini calls per process per `LLM_CALL_WINDOW_SECONDS`. When the limit is reached, Gemini is unavailable, or guarded output is invalid, the deterministic rules provider handles the request. The default `LLM_PROVIDER=rules` requires no Gemini credential.
+
+### Google Cloud Services
+
+| Service | Purpose | What the repository implements |
 |---|---|---|
-| Authorization | ✓ Support may call `modify_order` | Every downstream agent checked on its own permissions |
-| Money out | ₹0.00 | ₹72,000.00 |
-| Other agents | none | finance, inventory, crm (5 downstream actions) |
-| Reversibility | FULL | PARTIAL (refund and emails can't be undone) |
-| Risk · decision | **10 LOW · AUTO_APPROVED** | **68 HIGH · APPROVAL_REQUIRED** |
+| Cloud Run | Host API and web containers | Dockerfiles and deployment commands in [`docs/DEPLOY.md`](docs/DEPLOY.md) |
+| Cloud SQL | Managed PostgreSQL | Cloud SQL connection for the API and migration job in deployment documentation |
+| Artifact Registry | Container image storage | Build and push instructions for API and web images |
+| Secret Manager | Deployment secrets | Instructions for database URL and optional Gemini/admin credentials |
 
-Both columns come from the same engines and the same policy. The left column is the root node scored alone (`risk.direct`), and the right column is the full cascade. Nobody requested the refund. The edit emits `ORDER_MODIFIED`, the reaction rule `finance.refund_on_downsize@1` (condition `TOTAL_DECREASED`) triggers the **Finance** agent, and Finance proposes `issue_refund ₹72,000.00`. That proposal passes **Finance's own** authorization; Support has no refund permission, and none is inherited. The refund then triggers CRM's case and emails. On screen, the graph marks the root as the only `DIRECT ACTION` and every other node as `AGENT-TRIGGERED`. A "Why it happens" panel spells out each event → rule → agent → proposal → authorization → simulation step. Revoke Finance's permission and the same proposal is `BLOCKED` at the Finance node.
+Firebase Hosting, Vertex AI, Firestore, Pub/Sub, ADK, and Terraform are not part of this repository’s deployment implementation.
 
-## A decision through Cascade
+### SDK and Frameworks
 
-### Request
+- `google-genai` is the optional Gemini client; `temperature=0` and structured JSON responses constrain model output.
+- FastAPI and Pydantic 2 implement typed HTTP endpoints and validation.
+- SQLAlchemy 2, psycopg 3, and Alembic implement PostgreSQL persistence and schema migrations.
+- NetworkX computes execution ordering and graph measures over the completed consequence report. The BFS event/reaction traversal is Cascade code.
 
-The customer-support agent proposes:
+[Back to top](#cascade)
 
-> "Cancel ORD-10482, customer wants out"
+## The Consequence Pipeline
 
-ORD-10482 is an ₹84,500 order from a VIP customer. The payment has been captured and stock is reserved.
+Natural language parsing is optional. A structured tool call enters the same validation and deterministic consequence simulation.
 
-### What Cascade sees
+```text
+Operator request
+      |
+      v
+I.   Parse intent (rules by default; Gemini optional)
+      |
+      v
+II.  Validate tool, parameters, identity, and entities
+      |    Missing or ambiguous details -> ask operator
+      v
+III. Simulate root tool on copy-on-write snapshot
+      |
+      v
+IV.  Traverse event -> reaction rule -> agent tool
+      |    Simulate and authorize every graph node
+      v
+V.   Measure the complete blast radius
+      |
+      v
+VI.  Score risk and apply policy
+      +--> BLOCKED ----------------------> Report + audit
+      +--> AUTO_APPROVED ---------------> VII
+      +--> APPROVAL_REQUIRED -> human -> VII
+                                           |
+                                           v
+VII. Lock, re-simulate, compare, execute, audit
+```
 
-The parser turns the sentence into `cancel_order {order_id: "ORD-10482"}`, and the acting agent comes from the request, not from the text. Simulating `cancel_order` emits an `ORDER_CANCELLED` event. Three agents have reaction rules subscribed to that event, and the Finance refund emits `REFUND_ISSUED`, which triggers two more CRM rules.
+<details>
+<summary><b>Stage I — Intent Parsing</b></summary>
 
-### Consequence graph
+**What it does:** Converts an operator’s sentence into one candidate tool call.
+
+**Key details:** Rules parsing is the default and extracts only stated details. Gemini is optional and returns schema-constrained JSON. The acting agent comes from request context, never model text. Invalid or unavailable Gemini falls back to rules.
+
+**Outputs:** Candidate tool ID and flat parameters, or unresolved intent for clarification/error handling; parser source is recorded.
+
+</details>
+
+<details>
+<summary><b>Stage II — Validation and Clarification</b></summary>
+
+**What it does:** Validates the tool, parameters, acting agent, permissions, and referenced entities.
+
+**Key details:** Unknown fields, malformed values, and unauthorized tool calls are rejected. Missing or ambiguous entities trigger a clarification prompt with candidates; Cascade does not guess.
+
+**Outputs:** Validated call ready to simulate, a clarification request, or a typed error/block.
+
+</details>
+
+<details>
+<summary><b>Stage III — Snapshot and Tool Simulation</b></summary>
+
+**What it does:** Simulates the proposed tool against a versioned snapshot using a copy-on-write overlay.
+
+**Key details:** Tool simulators describe reads, changes, emitted events, money, reversibility, customer impact, and sensitivity. Later simulated steps observe earlier overlay changes. Preview does not write business rows.
+
+**Outputs:** Root effect, overlay state, read versions, emitted events, and a state fingerprint.
+
+</details>
+
+<details>
+<summary><b>Stage IV — Consequence Graph Traversal</b></summary>
+
+**What it does:** Follows events through enabled reaction rules and simulates each resulting agent/tool proposal.
+
+**Key details:** A deterministic breadth-first traversal evaluates matching conditions in stable order. Authorization is checked at every node. Rule mappings can use event fields. Duplicate work, graph limits, and cycles are represented in the report. NetworkX provides deterministic topological execution order.
+
+**Outputs:** Consequence graph nodes and edges, node authorization, warnings and blockers, consulted rule/configuration fingerprints, and execution order.
+
+</details>
+
+<details>
+<summary><b>Stage V — Blast Radius</b></summary>
+
+**What it does:** Measures the effects of the full consequence graph.
+
+**Key details:** The report aggregates money movement, affected agents, downstream actions, changed records, reversibility, customer impact, and data sensitivity. It also computes a direct-root view for comparison.
+
+**Outputs:** Immutable consequence report and blast-radius facts for the UI and policy engine.
+
+</details>
+
+<details>
+<summary><b>Stage VI — Risk and Policy Decision</b></summary>
+
+**What it does:** Computes risk and returns `BLOCKED`, `APPROVAL_REQUIRED`, or `AUTO_APPROVED`.
+
+**Key details:** Policy weights, breakpoints, thresholds, and limits load from `backend/policy/policy.yaml`. Authorization and simulator failures are hard blocks. Gemini does not set risk or make the decision.
+
+<details>
+<summary><b>Risk dimensions</b></summary>
+
+| Dimension | Measures |
+|---|---|
+| Financial | Net money out against configured financial breakpoints |
+| Irreversibility | Whether simulated steps can be undone |
+| Downstream agents | Number of other agents triggered |
+| Customer impact | Highest impact level in the graph |
+| Data sensitivity | Most sensitive data touched by the graph |
+
+</details>
+
+**Outputs:** Score, risk level, dimension breakdown, policy version, decision, and stable reason codes.
+
+</details>
+
+<details>
+<summary><b>Stage VII — Approval, Revalidation, Execution, and Audit</b></summary>
+
+**What it does:** Collects approval if required and executes only the preview that still matches current state and configuration.
+
+**Key details:** Approval checks role, limit, proposer separation, and expiry. Execution locks the action and read rows, re-simulates, compares business and configuration fingerprints, and applies changes in graph order using transaction savepoints. Stale previews return a conflict without applying business changes. Lifecycle events are appended to the audit log with request IDs.
+
+**Outputs:** Approval decision, per-step execution status, stale/failed attempt details, and append-only audit entries.
+
+</details>
+
+[Back to top](#cascade)
+
+## A Decision Through Cascade
+
+The NovaCart hero cancellation starts with `ORD-10482`, a ₹84,500 VIP order with a captured payment. The support agent proposes `cancel_order`. The action emits `ORDER_CANCELLED`; Finance, Inventory, and CRM reaction rules propose downstream actions. A Finance refund emits `REFUND_ISSUED`, which can trigger CRM notifications and a case.
 
 ```mermaid
 flowchart LR
-    A["customer-support<br/>cancel_order<br/>ORD-10482"]
-    B["finance · issue_refund<br/>−₹84,500.00<br/>finance.refund_on_cancel@1"]
-    C["inventory · release_inventory<br/>inventory.release_on_cancel@1"]
-    D["crm · update_customer_status → AT_RISK<br/>crm.flag_vip_on_cancel@1 (optional)"]
-    E["crm · send_customer_notification<br/>REFUND_ISSUED email<br/>crm.notify_on_refund@1 (optional)"]
-    F["crm · create_customer_case<br/>HIGH_VALUE_REFUND<br/>crm.case_on_large_refund@1 (optional)"]
-    A -- ORDER_CANCELLED --> B
-    A -- ORDER_CANCELLED --> C
-    A -- ORDER_CANCELLED --> D
-    B -- REFUND_ISSUED --> E
-    B -- REFUND_ISSUED --> F
+    A["Support<br/>cancel"] -->|"ORDER_CANCELLED"| B["Finance<br/>refund"]
+    A -->|"ORDER_CANCELLED"| C["Inventory<br/>release stock"]
+    A -->|"ORDER_CANCELLED"| D["CRM<br/>update status"]
+    B -->|"REFUND_ISSUED"| E["CRM<br/>notify"]
+    B -->|"REFUND_ISSUED"| F["CRM<br/>case"]
 ```
 
-### Blast radius
+### Blast Radius
 
-| Measure | Value |
-|---|---|
-| Money out | ₹84,500.00 |
-| Other agents affected | 3 (finance, inventory, crm) |
+| Measure | Result |
+|---|---:|
+| Money out | ₹84,500 |
+| Other agents affected | 3 |
 | Downstream actions | 5 |
-| Reversibility | PARTIAL (some steps can be undone, some cannot) |
+| Reversibility | Partial |
 
-### Risk
+### Risk Assessment
+
+<details>
+<summary><b>Show risk dimensions and weights</b></summary>
 
 | Dimension | Score | Weight |
-|---|---|---|
+|---|---:|---:|
 | Financial | 93.8 | 0.35 |
 | Irreversibility | 50 | 0.20 |
 | Downstream agents | 75 | 0.15 |
 | Customer impact | 80 | 0.20 |
 | Data sensitivity | 60 | 0.10 |
-| **Total** | **76 · HIGH** | |
+| **Total** | **76 · HIGH** | — |
 
-Every weight, breakpoint and band comes from [`backend/policy/policy.yaml`](backend/policy/policy.yaml). The scorer has no constants of its own.
+Values are the documented worked example in `backend/policy/policy.yaml`, `backend/tests/unit/test_policy_risk.py`, and `docs/TECHNICAL_DESIGN.md`.
 
-### Decision
+</details>
 
-**APPROVAL_REQUIRED**, for two reasons:
+### Decision and Execution
 
-- `REFUND_ABOVE_AUTO_LIMIT`: "₹84,500.00 would leave NovaCart, above the ₹2,000.00 auto-approve limit."
-- `HIGH_RISK`: "Risk is HIGH (76/100)."
+The decision is **`APPROVAL_REQUIRED`** because the ₹84,500 outflow exceeds the configured ₹2,000 auto-approve limit and the score is HIGH. An approver must have an adequate limit and cannot approve their own proposal.
 
-An approval request opens with a 30-minute expiry. An approver whose limit is ₹10,000 is refused with `APPROVAL_LIMIT_EXCEEDED`. An approver whose limit is ₹1,00,000 can approve it.
+On execution, Cascade locks the action and read rows, re-simulates, and compares the state, graph, policy, reaction rules, and relevant catalog fingerprints. If they differ, it returns `409 STALE_*` and applies nothing. If the preview is current, it applies the verified changes step by step and records the attempt.
 
-### Execution
+<p align="center"><em>Approval is a backend control tied to the preview and its current policy.</em></p>
 
-When an operator executes the approved action, Cascade:
+<p align="center"><em>A changed state or configuration requires a fresh simulation.</em></p>
 
-1. locks the action row and every business row the simulation read
-2. re-simulates the action against the locked, current state
-3. compares the new state fingerprint, graph, policy and configuration fingerprints with the approved preview, and returns a `409 STALE_*` error without applying anything if any differ
-4. applies the verified changes step by step, each in its own savepoint, checking every field's expected `before` value
-5. records the execution attempt and the audit events
+[Back to top](#cascade)
 
-The order ends up `CANCELLED` and the payment `REFUNDED`, which are exactly the values shown in the preview.
+## Determinism and Safety
 
-## Architecture
+The LLM is an input device and optional narrator. It is outside the authoritative simulation and policy path.
 
-Cascade is a modular monolith: one FastAPI backend, one React single-page app and one PostgreSQL database. There are no queues, microservices or graph database.
+| Gemini may help with | Gemini does not decide |
+|---|---|
+| Parse natural language into a candidate tool and parameters | Money amounts or percentage calculations |
+| Interpret a what-if question as a candidate alternative call | Agent identity or permissions |
+| Explain a report using facts already computed by Cascade | Risk scores, bands, graph topology, or approval |
+
+**The boundary:** model output must match a strict schema, use an allowed tool, and pass backend parameter and entity validation. The acting agent always comes from the request. Gemini requests use temperature zero and JSON schema; invalid output is not retried. Explanation figures must match computed facts or the whole narrative is replaced with a deterministic template. Prompt-injection heuristics are audit signals, not the security boundary.
+
+**Demo authentication is not production authentication.** The seeded `X-User-Id` identities exist for judging the role and approval flows. They are not user authentication and must not be used with real customer or business data. In production mode, public-mode defaults restrict database reset, Escape Room runs, and API documentation. See [`docs/DEPLOY.md`](docs/DEPLOY.md) before publishing a deployment.
+
+[Back to top](#cascade)
+
+## What-If Analysis, Human Approval, and Security
+
+### What-If Analysis
+
+From a simulated cancellation, ask: **“What if we give 20% compensation instead?”** Cascade creates a separate alternative action for the same acting agent, computes its amount in the backend, and compares the results. Neither simulation changes business state.
+
+| Measure | Cancel `ORD-10482` | 20% compensation |
+|---|---:|---:|
+| Money out | ₹84,500 | ₹16,900 |
+| Downstream actions | 5 | 1 |
+| Risk | 76 · HIGH | 53 · MEDIUM |
+| Decision | `APPROVAL_REQUIRED` | `APPROVAL_REQUIRED` |
+
+<p align="center"><em>A lower-risk alternative is a separate action; Cascade shows the trade-off for a human.</em></p>
+
+### Human Approval
+
+- **Roles:** `VIEWER` can read; `OPERATOR` can propose and execute; `APPROVER` can approve or reject.
+- **Limits:** the approver’s configured limit must cover the action’s money out.
+- **No self-approval:** the proposer cannot approve their own action.
+- **Expiry:** pending approval expires at the policy-configured time.
+- **Idempotency:** repeating an approval or execution does not apply changes twice.
+- **Stale-state check:** changes to business data, policy, reaction rules, agents, tools, or permissions invalidate the preview.
+- **Rollback:** required-step failure rolls back the attempt; optional-step failure can produce partial execution according to the recorded dependency graph.
+
+### Security Controls
+
+- Typed tool parameters reject unknown fields and invalid money precision.
+- Authorization is checked at each consequence graph node.
+- Backend policy decides block/approval/auto-approval; clients and LLM output cannot override it.
+- Approval enforces role, limit, proposer separation, and expiry.
+- Execution uses locks, re-simulation, fingerprints, and transactional savepoints.
+- API errors use a structured envelope and request IDs; unexpected error details are not returned to clients.
+
+[Back to top](#cascade)
+
+## Ecosystem: Mercora
+
+[Mercora](https://github.com/KRYSTALM7/Mercora) is an e-commerce operations app with a Cascade integration for refund consequence simulation. The [live Mercora dashboard](https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard) sends a scoped simulation request to Cascade and displays the returned blast radius, risk assessment, and policy decision. Simulation is read-only: it does not modify the order or issue the refund. Mercora’s direct refund endpoint is disabled and returns **410 Gone**, enforcing the simulate-before-act workflow.
 
 ```mermaid
-flowchart TB
-    UI["React SPA<br/>Simulate · Dashboard · Agents & rules · Escape room · Audit"]
-    API["FastAPI API<br/>routers · request ids · error envelope · demo identity (X-User-Id)"]
-
-    subgraph SVC["Services: use-case orchestration and transactions"]
-        direction LR
-        ACT["actions<br/>parse · clarify · simulate"]
-        APR["approvals"]
-        EXE["execution"]
-        WI["what-if"]
-        AUD["audit"]
-    end
-
-    subgraph DOM["Domain: pure, deterministic"]
-        direction LR
-        SIM["tool simulators<br/>+ world state overlay"]
-        CE["consequence engine"]
-        RISK["risk scorer"]
-        POL["policy / decision engine"]
-        CLR["clarification rules"]
-    end
-
-    LLM["LLM adapters<br/>rules (default) · Gemini (optional)<br/>guards"]
-    YAML[("policy.yaml")]
-    REPO["Repositories<br/>snapshot + catalog loading · row locks · apply changes"]
-    DB[("PostgreSQL")]
-    GEM["Gemini API"]
-
-    UI -->|HTTP / JSON| API --> SVC
-    SVC --> DOM
-    SVC --> LLM
-    LLM -.->|optional| GEM
-    SVC --> REPO --> DB
-    YAML -->|validated at startup| POL
+sequenceDiagram
+    actor Operator
+    participant M as Mercora
+    participant C as Cascade
+    Operator->>M: Request refund simulation
+    M->>C: Simulate proposed refund
+    C-->>M: Consequence graph, blast radius, risk, decision
+    M-->>Operator: Display preview; no refund is executed
 ```
 
-| Layer | Role |
-|---|---|
-| **Frontend** | React, TanStack Query, and React Flow with a dagre layout. It renders the graph, blast radius, risk, decision, what-if comparison, approvals and audit. It never calculates money or risk. |
-| **API** | Thin FastAPI routers with typed request schemas, a single error envelope, request-id middleware and the demo identity header. |
-| **Services** | Orchestrate each use case and own its transaction: parse → simulate → score → decide → persist → audit, then approval, locked execution and what-if. |
-| **Domain** | Pure Python engines for simulators, world state, consequence traversal, risk, decision and clarification. An architecture test fails if this layer imports the database, HTTP, LLM or infrastructure code. |
-| **LLM adapters** | A provider interface with three calls (`parse_intent`, `interpret_what_if`, `explain`) and two implementations: a deterministic rules provider and Gemini. All output goes through the guards. |
-| **Repositories** | Load the immutable snapshot and catalog, lock rows in a deterministic order, and apply previewed changes with `before`-value checks. |
-| **PostgreSQL** | The source of truth. Money columns are `NUMERIC(12,2)`, enum and value CHECK constraints are enforced in the database, mutable rows carry version columns, and reports are stored as immutable JSONB. |
+<p align="center"><em>Mercora demonstrates Cascade as a consequence preview service in an e-commerce workflow.</em></p>
 
-## Core execution model
+<p align="center">
+  <a href="https://github.com/KRYSTALM7/cascade">Cascade repository</a> ·
+  <a href="https://github.com/KRYSTALM7/Mercora">Mercora repository</a>
+</p>
 
-1. **Parse.** The rules provider or Gemini turns text into a structured intent. The output is validated against a strict schema, the tool catalog and the tool's own parameter model. Identity comes from the request.
-2. **Validate.** The backend checks that required fields are present and that referenced entities exist. If something is missing or ambiguous (for example, "3 customers match 'John'"), Cascade asks a question with explicit candidates rather than guessing.
-3. **Simulate.** The whole business state is loaded as an immutable snapshot, and the action runs on a copy-on-write overlay. Each read records the row's version. **Business state is read here and never written.**
-4. **Analyze.** A breadth-first traversal over events and reaction rules builds the consequence graph. Every node is authorized, and the blast radius is measured from the nodes that will execute.
-5. **Decide.** The risk scorer and policy engine produce a score, a level and a decision with reason codes. Authorization failures are hard blocks and are never weighed against risk.
-6. **Approve.** If approval is required, a human with the APPROVER role and a high enough limit, who isn't the proposer, approves or rejects the action before the request expires.
-7. **Revalidate.** At execution, the read rows are locked, the action is re-simulated, and the business-state fingerprint, graph shape and configuration (policy, reaction rules, agents/tools/permissions) are compared with the approved preview.
-8. **Execute.** **This is the only place business state is written.** Changes are applied in topological order, one savepoint per step.
-9. **Audit.** Every transition is appended to the audit log with the actor, payload and request id.
+[Back to top](#cascade)
 
-## Determinism and safety
+## Tech Stack
 
-The LLM is kept outside the authoritative logic. It is an input device and a narrator.
-
-**What the LLM does**
-
-- turns a natural-language request into a structured intent (a tool name and flat parameters)
-- turns "what if we did X instead?" into an alternative tool call
-- optionally writes a short narrative of a report the backend has already computed
-
-**What the LLM does not decide**
-
-- money: amounts are decimal strings, and percentages are converted to rupees by the backend
-- permissions or authorization, which the engine checks on every node
-- risk scores or levels
-- graph topology, which comes from declared reaction rules only
-- approval, which is a policy decision plus a human
-
-**The boundary**
-
-- LLM output must match a strict JSON schema. Invented tools and unexpected parameters are rejected (`LLM_OUTPUT_INVALID`), and invalid output is never retried.
-- The acting agent always comes from the request. If the text names a real tool the agent isn't allowed to call, Cascade still creates the action and the engine blocks it as `TOOL_NOT_PERMITTED`, so the attempt appears in the audit log.
-- With Gemini, user text is sent as a field inside a JSON document, not mixed into the instructions. Gemini runs at temperature 0 with a JSON response schema.
-- Every ₹ amount and percentage in a narrative must match a number in the computed facts. If any doesn't, the whole narrative is discarded and replaced with a deterministic template.
-- A heuristic flags likely prompt-injection phrases (`INJECTION_SUSPECTED`) in the audit log. This is a signal for reviewers, not the defence.
-
-These guards limit what LLM output can do. They don't make the LLM correct. A wrong but well-formed parse yields a well-formed action, and that action then goes through the same validation, simulation, policy and approval as any other.
-
-## What-if analysis
-
-From any simulated action you can ask for an alternative:
-
-> "What if we give 20% compensation instead?"
-
-Cascade interprets the question as a separate tool call for the same acting agent (`issue_compensation {order_id: "ORD-10482", percentage: "20"}`). It simulates that call as an independent child action and compares the two deterministically:
-
-| | Cancel ORD-10482 | 20% compensation |
+| Area | Technology | Role |
 |---|---|---|
-| Money out | ₹84,500.00 | ₹16,900.00 |
-| Downstream actions | 5 | 1 |
-| Risk | 76 HIGH | 53 MEDIUM |
-| Decision | APPROVAL_REQUIRED | APPROVAL_REQUIRED (still above ₹2,000) |
+| Backend | Python 3.11+, FastAPI, Uvicorn, Pydantic 2 | Typed API, orchestration, validation |
+| Database | PostgreSQL 16, SQLAlchemy 2, psycopg 3, Alembic | Durable business, catalog, governance, and audit data |
+| Consequence graph | Cascade BFS engine, NetworkX | Event/reaction traversal and graph algorithms |
+| Policy | YAML, Pydantic | Risk weights, breakpoints, thresholds, and decision rules |
+| LLM | `google-genai`, Gemini `gemini-3.8-flash` (optional) | Structured parse, what-if interpretation, constrained explanation |
+| Frontend | React 19, TypeScript, Vite 8, React Router | Single-page application |
+| Graph UI | `@xyflow/react`, `@dagrejs/dagre` | Interactive consequence graph and layout |
+| Data fetching / styling | TanStack Query, Tailwind CSS 4 | API state and UI styling |
+| Testing | pytest, Vitest, Playwright | Backend, component, and browser-flow coverage |
+| Runtime | Docker Compose; Cloud Run deployment documented | Local stack and optional Google Cloud hosting |
 
-The backend computes the ₹16,900.00. Neither simulation modifies business state, and the alternative is a real action that can be approved and executed on its own.
+[Back to top](#cascade)
 
-## Human approval
+## Getting Started
 
-- **Roles.** `VIEWER` can read only. `OPERATOR` can propose and execute. `APPROVER` can also approve and reject.
-- **Approval limits.** An approver's limit must be at least the action's money out (equal is enough).
-- **No self-approval.** The proposer can't approve their own action.
-- **Expiry.** A pending approval expires after the `approval_expiry_minutes` set in policy (30). Expiry is checked whenever the action is accessed.
-- **Idempotency.** A repeated approve or execute returns the existing result and nothing is applied twice. A reused idempotency key with a different payload returns `409`.
-- **Execution locks.** The action row and all business rows it read are locked `FOR UPDATE` in a fixed order.
-- **Stale-state detection.** A different business-state fingerprint, graph shape or blocked status returns `409 STALE_STATE`. A changed policy, reaction rule, or agent/tool/permission row returns `409 STALE_POLICY_VERSION`, `STALE_REACTION_RULE_VERSION` or `STALE_TOOL_CONFIG`. The approval's audit entry records what it was bound to. Re-simulating opens a new approval, because approvals never carry over.
-- **Rollback.** If a required step fails, the whole attempt rolls back (`FAILED`, retryable). If an optional step fails, that step and its descendants roll back and the rest is kept (`PARTIALLY_EXECUTED`).
+### Prerequisites
 
-The full mechanics are in [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md#22-approval-model).
+- Python 3.11 or newer and [`uv`](https://docs.astral.sh/uv/)
+- Node.js and npm
+- Docker Engine with Docker Compose for the quick start
+- Gemini API credential only if opting into `LLM_PROVIDER=gemini`
 
-## Security
-
-- Strict, typed tool parameters: unknown fields are forbidden, there is no type coercion, and money has at most two decimal places.
-- Authorization on every node of the consequence graph, including expiry boundaries.
-- Fail-closed handling of LLM output, with numeric checks on narratives.
-- Approval boundaries enforced by the backend: role, limit, no self-approval, expiry.
-- Stale-state protection under row locks.
-- Database constraints: CHECKs on money, quantities and enums, plus foreign keys, unique keys and version columns.
-- Explicit CORS origins (wildcards are refused at startup), sanitized request ids, and secrets held as `SecretStr` so they never appear in logs or repr output.
-- An insert-only audit log, with no update or delete path in application code.
-
-**Demo authentication.** The caller is identified by an `X-User-Id` header that names a seeded user. POST endpoints reject unknown users. GET endpoints are open. This is a demo identity mechanism, **not production authentication**, and the UI shows a banner saying so whenever `/healthz` reports `demo_mode: true`. Real authentication (OIDC) is listed as post-MVP work in the blueprint. `DEMO_MODE` enables database reset and the Escape Room. On a public URL, `PUBLIC_MODE` (on by default when `ENVIRONMENT=production`) refuses both with `403 PUBLIC_MODE_RESTRICTED` and hides the API docs. Gemini is opt-in and capped by `LLM_CALL_LIMIT`; past the cap the deterministic rules provider answers. The demo uses synthetic data only. Deployment: [`docs/DEPLOY.md`](docs/DEPLOY.md).
-
-See [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md#33-security-architecture) for the full security architecture.
-
-## Tech stack
-
-| Area | Technology |
-|---|---|
-| Backend | Python 3.11+, FastAPI, Pydantic v2, SQLAlchemy 2, Alembic |
-| Database | PostgreSQL 16 (psycopg 3) |
-| Graph | NetworkX for in-process execution ordering and depth |
-| LLM | Deterministic rules provider (default) · Google Gemini via `google-genai` (optional) |
-| Frontend | React 19, TypeScript, Vite, Tailwind CSS, TanStack Query, React Router, React Flow + dagre |
-| Testing | pytest, mypy `--strict`, ruff · Vitest + Testing Library · Playwright |
-| Runtime | Docker Compose locally (Postgres, migrate job, API, nginx-served SPA). The Cloud Run guide is in [`docs/DEPLOY.md`](docs/DEPLOY.md) |
-
-## Running locally
-
-### Docker
+### Docker Quick Start
 
 ```bash
-cp .env.example .env
+git clone https://github.com/KRYSTALM7/cascade.git
+cd cascade
 docker compose up --build
 ```
 
-- App: <http://localhost:5173>
-- API docs: <http://localhost:8000/docs>
+Open `http://localhost:5173`. Compose starts PostgreSQL, applies Alembic migrations, seeds NovaCart only if the database is empty, then starts the API and web app. The local configuration uses `LLM_PROVIDER=rules` unless changed.
 
-Compose starts Postgres, runs migrations, seeds NovaCart into an empty database, then starts the API and the nginx-served frontend. Nginx proxies `/api` to the backend.
+### Host Development
 
-The default `LLM_PROVIDER=rules` runs fully offline. To use Gemini, set `LLM_PROVIDER=gemini` and `GEMINI_API_KEY` in `.env`. If port 5432 is already taken, set `DB_PORT` in `.env` to a free port.
-
-### Host development
-
-Requires Python 3.11+, [uv](https://docs.astral.sh/uv/), Node 22, and Docker for Postgres.
+Start PostgreSQL first, then in one terminal:
 
 ```bash
-make install
-make db-up && make migrate && make seed
-make dev-backend      # API on :8000
-make dev-frontend     # Vite on :5173, proxies /api to :8000
+cd backend
+uv sync
+uv run alembic upgrade head
+uv run python -m app.seed --if-empty
+uv run uvicorn app.main:app --reload --port 8000
 ```
 
-Without `make` (for example, Git Bash on Windows):
+In another terminal:
 
 ```bash
-cd backend && uv sync && uv run alembic upgrade head && uv run python -m app.seed
+cd frontend
+npm ci
+npm run dev
 ```
 
-Demo users, selectable in the header: `ops-ravi` (operator), `approver-asha` (approver, ₹1,00,000), `approver-dev` (approver, ₹10,000), `viewer-kim` (viewer). For a 3-minute walkthrough, see [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md).
+Vite serves `http://localhost:5173` and proxies `/api`, `/healthz`, and `/readyz` to `http://localhost:8000`. The Makefile also provides `make install`, `make up`, `make down`, `make migrate`, `make seed`, `make dev-backend`, and `make dev-frontend`.
 
-## Testing
+### Environment Variables
 
-| Suite | Result | Command |
+Settings are read by `backend/app/core/config.py`. Use variable names and descriptions only here; do not put credentials in source control.
+
+<details>
+<summary><b>Backend and frontend environment variables</b></summary>
+
+| Name | Description |
+|---|---|
+| `DATABASE_URL` | PostgreSQL SQLAlchemy URL using psycopg 3 |
+| `TEST_DATABASE_URL` | Dedicated PostgreSQL URL for database integration tests |
+| `ENVIRONMENT` | Runtime environment: `local`, `test`, or `production` |
+| `PUBLIC_MODE` | Restricts shared demo operations; unset defaults on in production |
+| `DEMO_MODE` | Enables demo identities and presenter-only operations |
+| `DEMO_ADMIN_TOKEN` | Optional presenter credential for restricted public demo operations |
+| `LLM_PROVIDER` | `rules` (default) or optional `gemini` |
+| `GEMINI_API_KEY` | Optional Gemini API credential |
+| `GEMINI_API_KEYS` | Optional comma-separated Gemini key ring |
+| `GEMINI_MODEL` | Gemini model name; default is `gemini-3.8-flash` |
+| `LLM_TIMEOUT_SECONDS` | Gemini request timeout |
+| `LLM_CALL_LIMIT` | Gemini calls permitted per process in one budget window |
+| `LLM_CALL_WINDOW_SECONDS` | Gemini call-budget window duration |
+| `DB_POOL_SIZE` | SQLAlchemy connection pool size |
+| `DB_MAX_OVERFLOW` | Additional SQLAlchemy connections under load |
+| `DB_ECHO` | Enable SQLAlchemy SQL logging |
+| `CORS_ORIGINS` | Comma-separated explicit browser origins; wildcard is rejected |
+| `LOG_LEVEL` | Application log level |
+| `LOG_JSON` | Use JSON-formatted logs |
+| `POLICY_PATH` | Policy YAML file location |
+| `FAULT_INJECTION` | Test/demo-only execution failure injection; never use in a shared deployment |
+| `VITE_DEV_BACKEND_URL` | Optional Vite proxy backend URL |
+| `BACKEND_URL` | Frontend container’s runtime API upstream |
+| `PORT` | Container listen port |
+
+</details>
+
+The checked-in `.env.example` is the local template. `.env` is ignored. Never paste real keys, database URLs, or tokens into this README or commit them.
+
+[Back to top](#cascade)
+
+## Reproducible Testing
+
+### Quick Test (Under 5 Minutes)
+
+1. Start the local stack with `docker compose up --build`; wait for the UI’s backend status to show ready.
+2. Simulate **“Change the laptop quantity to 1 on ORD-10550, customer only needs one.”**
+3. Compare the root action with the full consequence graph; inspect the Finance reaction rule and CRM follow-on actions.
+4. Review the blast radius, five risk dimensions, and `APPROVAL_REQUIRED` policy result.
+5. Try the 20% compensation what-if, then inspect the approval gate and audit trail.
+6. In a disposable local stack, run an Escape Room scenario to see an authorization or stale-state control.
+
+### What to Verify
+
+| Feature | Where to look | Expected behavior |
 |---|---|---|
-| Backend (unit, integration, API) | 343 passed | `REQUIRE_DB=1 make test-backend` |
-| Frontend (components, layout, formatting) | 78 passed | `make test-frontend` |
-| Playwright (end-to-end demo flows) | 12 passed | `make e2e` |
+| Readiness | UI status; `GET /healthz`, `GET /readyz` | API is alive and readiness reflects PostgreSQL availability |
+| Hidden cascade | Simulate page; `ORD-10550` | A reversible quantity edit previews downstream refund, inventory, and CRM actions |
+| Authorization | Try a tool the acting agent cannot call | The unauthorized node is blocked and recorded |
+| Risk and policy | Risk panel; `GET /api/policy` | Backend returns dimensions, reason codes, and a deterministic decision |
+| What-if | What-if panel | Alternative is a separate simulation and does not change business state |
+| Approval | Approval gate | Role, limit, expiry, and no-self-approval rules are enforced |
+| Stale preview | Change state/configuration before execution | Execution returns a `409 STALE_*` conflict and applies nothing |
+| Rules fallback | `LLM_PROVIDER=rules`, or Gemini unavailable/over budget | Parse and explanation remain available through deterministic rules/templates |
+| Audit | Audit page; `GET /api/audit` | Lifecycle entries include actor and request ID |
+| Mercora integration | Mercora order refund simulation | Cascade report is displayed; direct refund endpoint returns 410 |
 
-```bash
-make check                 # ruff, ruff format, mypy --strict, eslint, tsc, pytest, vitest, build
-bash scripts/check.sh      # the same gate without make (requires the database)
+### Test Suites and Commands
+
+| Suite | Command | Notes |
+|---|---|---|
+| Backend unit/API/integration | `make test-backend` | PostgreSQL integration tests need `TEST_DATABASE_URL`; opt-in live Gemini test is skipped unless enabled |
+| Frontend component/unit | `make test-frontend` | Runs the Vitest suite |
+| Browser end-to-end | `make e2e` | Playwright flow resets the configured demo database; use a disposable local database |
+| Lint and types | `make lint` and `make typecheck` | Ruff, ESLint, mypy, and TypeScript checks |
+| Full gate | `make check` | Lint, types, tests, and frontend build |
+
+Test totals depend on the checked-out revision and configured test database. PostgreSQL integration tests need `TEST_DATABASE_URL`; the opt-in live Gemini test can call the Gemini API; and `make e2e` resets its configured demo database. Use a disposable database for any test that writes or resets data.
+
+[Back to top](#cascade)
+
+## Repository Layout
+
+<details>
+<summary><b>Expand the project tree</b></summary>
+
+```text
+.
+├── backend/
+│   ├── app/
+│   │   ├── api/routes/       # FastAPI routers
+│   │   ├── core/             # Settings, middleware, logs, errors
+│   │   ├── db/               # Database session and types
+│   │   ├── domain/           # Tools, graph, risk, and policy
+│   │   ├── llm/              # Gemini/rules providers and guards
+│   │   ├── models/           # SQLAlchemy data models
+│   │   ├── repositories/     # Database access and execution
+│   │   ├── schemas/          # API request and response types
+│   │   ├── seed/             # NovaCart seed dataset and CLI
+│   │   └── services/         # Application use cases
+│   ├── alembic/versions/     # PostgreSQL schema migrations
+│   ├── policy/policy.yaml    # Risk weights, thresholds, policy
+│   ├── tests/                # Unit, API, and database tests
+│   ├── Dockerfile            # FastAPI container
+│   ├── pyproject.toml        # Dependencies and tool settings
+│   └── uv.lock               # Locked Python dependencies
+├── docs/
+│   ├── assets/               # Logo and demo images
+│   ├── API_KEY_ROTATION.md   # Gemini key rotation notes
+│   ├── BLUEPRINT.md          # Engineering blueprint
+│   ├── DEMO_SCRIPT.md        # Judge walkthrough
+│   ├── DEPLOY.md             # Google Cloud deployment guide
+│   ├── EDGE_CASES.md         # Edge-case checks
+│   ├── PROGRESS.md           # Historical project/test progress
+│   └── TECHNICAL_DESIGN.md   # Detailed system design
+├── frontend/
+│   ├── public/               # Logo and existing artwork
+│   ├── src/api/              # API client, endpoints, and types
+│   ├── src/components/       # Consequence and approval UI
+│   ├── src/graph/            # Graph layout helpers
+│   ├── src/pages/            # Application pages
+│   ├── e2e/                  # Playwright demo flow
+│   ├── tests/                # Browser responsiveness checks
+│   ├── Dockerfile            # Vite build served by nginx
+│   ├── nginx.conf.template   # Runtime API reverse proxy
+│   ├── package.json          # Frontend packages and scripts
+│   └── vite.config.ts        # Vite and Vitest config
+├── reports/performance/      # Prototype performance and cost reports
+├── scripts/
+│   ├── check.sh              # Repository quality gate
+│   └── db-init.sql           # Local test database initialization
+├── docker-compose.yml        # Local PostgreSQL and app stack
+├── Makefile                  # Development and quality commands
+└── .env.example              # Environment variable template
 ```
 
-`make e2e` **resets the database** the backend points at, so it needs `DEMO_MODE=true`. One extra live Gemini smoke test is opt-in and skipped by default (`GEMINI_API_KEY=… uv run pytest -m live` in `backend/`). The normal suite never calls Gemini.
+</details>
 
-Every behaviour is a row in the [edge-case matrix](docs/EDGE_CASES.md) with its exact expected result and the test that proves it. Every row passes except the opt-in live Gemini test.
-
-## Repository layout
-
-```
-backend/    FastAPI app: pure domain engines, services, repositories, LLM adapters, policy.yaml, tests
-frontend/   React SPA and the Playwright end-to-end suite (frontend/e2e)
-docs/       blueprint, technical design, edge-case matrix, demo script, deployment, progress log
-scripts/    quality-gate runner and the test-database init script
-```
+[Back to top](#cascade)
 
 ## Documentation
 
 | Document | Contents |
 |---|---|
-| [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md) | Architecture in depth: engines, trust boundaries, execution safety, concurrency, trade-offs |
-| [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) | The binding engineering blueprint (rev 2) |
-| [`docs/EDGE_CASES.md`](docs/EDGE_CASES.md) | Edge-case matrix: ID, expected behaviour, proving test |
-| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | 3-minute demo click path |
-| [`docs/DEPLOY.md`](docs/DEPLOY.md) | Google Cloud Run deployment and environment variables |
-| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Build log, phase gates and recorded decisions |
+| [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md) | Architecture, trust boundaries, execution safety, concurrency, and design trade-offs |
+| [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) | Engineering blueprint |
+| [`docs/EDGE_CASES.md`](docs/EDGE_CASES.md) | Edge-case matrix and expected behaviors |
+| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | Judge-facing walkthrough |
+| [`docs/DEPLOY.md`](docs/DEPLOY.md) | Cloud Run deployment with Cloud SQL, Artifact Registry, and Secret Manager |
+| [`docs/API_KEY_ROTATION.md`](docs/API_KEY_ROTATION.md) | Optional Gemini API key rotation notes |
+| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Historical build log and validation gates |
+
+[Back to top](#cascade)
+
+## Team
+
+| Team member | Focus | Profiles |
+|---|---|---|
+| **Sujan Kumar** | Product engineering, Cascade engine, and Mercora integration | [![GitHub KRYSTALM7](https://img.shields.io/badge/GitHub-KRYSTALM7-181717?style=for-the-badge&logo=github)](https://github.com/KRYSTALM7) [![Google Developers CR1TIC4L](https://img.shields.io/badge/Google_Developers-CR1TIC4L-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://g.dev/CR1TIC4L) |
+| **Ipshita (@ipjrb12)** | Planning, system design, workflow, and architecture | [![GitHub ipjrb12](https://img.shields.io/badge/GitHub-ipjrb12-181717?style=for-the-badge&logo=github)](https://github.com/ipjrb12) [![Google Developers ipshita12gdg](https://img.shields.io/badge/Google_Developers-ipshita12gdg-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://me.developers.google.com/u/ipshita12gdg) |
+
+[Back to top](#cascade)
+
+<p align="center">
+  <img src="docs/assets/logo.png" alt="Cascade logo" width="100" />
+</p>
+<p align="center"><strong>Built for Google AI Builder Cup 2026</strong></p>
+<p align="center"><a href="https://github.com/KRYSTALM7/cascade">Cascade on GitHub</a></p>

@@ -14,7 +14,8 @@ import time
 from collections.abc import Callable
 from contextvars import ContextVar
 
-from app.llm.provider import LLMProvider, Narrative
+from app.llm.guards import to_tool_call
+from app.llm.provider import LLMOutputInvalidError, LLMProvider, LLMUnavailableError, Narrative
 from app.llm.schemas import ExplainInput, LLMIntent, ParseContext, WhatIfContext
 
 logger = logging.getLogger(__name__)
@@ -63,25 +64,64 @@ class CallBudget:
 class BudgetedProvider:
     """Gemini while the budget lasts, the deterministic rules provider after that."""
 
-    def __init__(self, primary: LLMProvider, fallback: LLMProvider, budget: CallBudget) -> None:
+    def __init__(
+        self,
+        primary: LLMProvider,
+        fallback: LLMProvider,
+        budget: CallBudget,
+        cooldown_seconds: float = 30.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
         self.primary = primary
         self.fallback = fallback
         self.budget = budget
+        self.cooldown_seconds = cooldown_seconds
+        self._clock = clock
+        self._primary_unavailable_until = 0.0
+        self._lock = threading.Lock()
 
     @property
     def name(self) -> str:
         return _served_by.get() or self.primary.name
 
     def _pick(self) -> LLMProvider:
-        provider = self.primary if self.budget.take() else self.fallback
+        with self._lock:
+            cooling_down = self._clock() < self._primary_unavailable_until
+        provider = self.primary if not cooling_down and self.budget.take() else self.fallback
         _served_by.set(provider.name)
         return provider
 
+    def _call(self, method: str, *args: object) -> object:
+        provider = self._pick()
+        if provider is self.fallback:
+            return getattr(provider, method)(*args)
+        try:
+            result = getattr(provider, method)(*args)
+            if method in {"parse_intent", "interpret_what_if"}:
+                context = args[-1]
+                call = to_tool_call(result)  # type: ignore[arg-type]
+                if call.tool_id is None:
+                    raise LLMOutputInvalidError("The model could not resolve a tool from the request")
+                if call.tool_id not in context.permitted_tools:  # type: ignore[union-attr]
+                    raise LLMOutputInvalidError("The model selected a tool unavailable to this agent")
+        except (LLMUnavailableError, LLMOutputInvalidError):
+            # The deterministic provider is safe here: its output still passes the same schemas,
+            # allowlist and backend validation as AI output. A cooldown prevents hot-looping on a
+            # broken provider; after it expires, one request probes recovery.
+            with self._lock:
+                self._primary_unavailable_until = self._clock() + self.cooldown_seconds
+            _served_by.set(self.fallback.name)
+            logger.warning("llm_provider_fallback", extra={"provider": self.primary.name})
+            return getattr(self.fallback, method)(*args)
+        with self._lock:
+            self._primary_unavailable_until = 0.0
+        return result
+
     def parse_intent(self, text: str, ctx: ParseContext) -> LLMIntent:
-        return self._pick().parse_intent(text, ctx)
+        return self._call("parse_intent", text, ctx)  # type: ignore[return-value]
 
     def interpret_what_if(self, text: str, ctx: WhatIfContext) -> LLMIntent:
-        return self._pick().interpret_what_if(text, ctx)
+        return self._call("interpret_what_if", text, ctx)  # type: ignore[return-value]
 
     def explain(self, facts: ExplainInput) -> Narrative:
-        return self._pick().explain(facts)
+        return self._call("explain", facts)  # type: ignore[return-value]

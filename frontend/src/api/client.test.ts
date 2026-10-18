@@ -28,6 +28,13 @@ describe("apiFetch", () => {
     expect(err).toMatchObject({ status: 502, code: "HTTP_ERROR", requestId: "r-2" });
   });
 
+  it("surfaces proxy timeouts as actionable gateway errors", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(new Response("upstream timeout", { status: 504 })));
+    const err = await apiFetch("/api/actions/parse").catch((e: unknown) => e);
+    expect(err).toMatchObject({ status: 504, code: "GATEWAY_TIMEOUT" });
+    expect((err as ApiError).message).toContain("timed out waiting for the API");
+  });
+
   it("reports network failures as NETWORK_ERROR", async () => {
     vi.stubGlobal("fetch", vi.fn().mockRejectedValue(new TypeError("Failed to fetch")));
     await expect(apiFetch("/healthz")).rejects.toMatchObject({ status: 0, code: NETWORK_ERROR });

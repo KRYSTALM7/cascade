@@ -77,6 +77,80 @@ def test_a_zero_limit_never_calls_gemini() -> None:
     assert calls == [] and provider.name == "rules"
 
 
+def test_provider_failure_falls_back_then_recovers_after_cooldown() -> None:
+    """AI outage serves deterministic results and a later request probes recovery."""
+    clock = FakeClock()
+    state = {"available": False, "calls": 0}
+
+    def transport(system: str, user: str, schema: dict[str, Any]) -> str:
+        state["calls"] += 1
+        if not state["available"]:
+            raise RuntimeError("provider unavailable")
+        return INTENT
+
+    provider = BudgetedProvider(
+        GeminiProvider(transport),
+        RulesProvider(),
+        CallBudget(10, 60, clock),
+        cooldown_seconds=5,
+        clock=clock,
+    )
+
+    assert provider.parse_intent("Cancel ORD-10482", CTX).intent == "cancel_order"
+    assert provider.name == "rules"
+    first_attempts = state["calls"]
+    assert first_attempts == 1
+
+    provider.parse_intent("Cancel ORD-10482", CTX)
+    assert state["calls"] == first_attempts  # cooldown avoids a hot retry loop
+
+    state["available"] = True
+    clock.now = 5
+    assert provider.parse_intent("Cancel ORD-10482", CTX).intent == "cancel_order"
+    assert provider.name == "gemini"
+    assert state["calls"] == first_attempts + 1
+
+
+def test_invalid_gemini_output_falls_back_to_rules_without_retrying() -> None:
+    calls = 0
+
+    def invalid_output(system: str, user: str, schema: dict[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return "not valid JSON"
+
+    provider = BudgetedProvider(
+        GeminiProvider(invalid_output), RulesProvider(), CallBudget(10, 60)
+    )
+    intent = provider.parse_intent("Change the laptop quantity to 1 on ORD-10550", CTX)
+
+    assert intent.intent == "modify_order"
+    assert intent.parameters.order_id == "ORD-10550"
+    assert intent.parameters.sku == "SKU-LAP-001"
+    assert intent.parameters.quantity == 1
+    assert provider.name == "rules"
+    assert calls == 1
+
+
+def test_semantically_invalid_gemini_tool_falls_back_to_rules() -> None:
+    calls = 0
+
+    def unsupported_tool(system: str, user: str, schema: dict[str, Any]) -> str:
+        nonlocal calls
+        calls += 1
+        return json.dumps({"intent": "invented_tool", "parameters": {}})
+
+    provider = BudgetedProvider(
+        GeminiProvider(unsupported_tool), RulesProvider(), CallBudget(10, 60)
+    )
+    intent = provider.parse_intent("Cancel ORD-10482", CTX)
+
+    assert intent.intent == "cancel_order"
+    assert intent.parameters.order_id == "ORD-10482"
+    assert provider.name == "rules"
+    assert calls == 1
+
+
 def test_gemini_is_always_built_behind_the_budget(monkeypatch: pytest.MonkeyPatch) -> None:
     """LLMB-04: the factory never returns an uncapped Gemini provider; rules stays the default."""
     monkeypatch.setattr(factory, "sdk_transport", lambda *_: lambda *_a: INTENT)

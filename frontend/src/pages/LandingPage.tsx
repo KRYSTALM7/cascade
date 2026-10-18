@@ -4,7 +4,7 @@ import { SCENARIOS, HERO } from "../lib/scenarios";
 import { agentName, agentStyle } from "../lib/format";
 import { ImpactCards } from "../components/ImpactCards";
 
-const MERCORA_URL = "http://localhost:3000";
+const MERCORA_URL = "https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard";
 
 /** Main landing page with production-ready hero */
 export function LandingPage() {

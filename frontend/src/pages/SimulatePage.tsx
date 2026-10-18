@@ -15,7 +15,6 @@ import { KPISummary } from "../components/KPISummary";
 import { ProposedAction } from "../components/ProposedAction";
 import { RiskPanel } from "../components/RiskPanel";
 import { TechnicalDetails } from "../components/TechnicalDetails";
-import { VoiceInput } from "../components/VoiceInput";
 import { WhatIfPanel } from "../components/WhatIfPanel";
 import ActionExplorer from "../components/ActionExplorer";
 import type { ActionDefinition } from "../data/actionCatalog";
@@ -92,7 +91,7 @@ function SimulationInput() {
           className="flex items-center gap-2 rounded-lg border border-slate-200 bg-white px-4 py-2 text-sm font-medium text-slate-700 hover:bg-slate-50 transition-colors"
         >
           <span className="text-lg">{showHelp ? '✕' : '❓'}</span>
-          {showHelp ? 'Close Help' : 'Show Help'}
+          {showHelp ? 'Close' : 'Decision Guide'}
         </button>
       </div>
 
@@ -100,64 +99,51 @@ function SimulationInput() {
         <div className="space-y-6 rounded-xl border border-blue-200 bg-blue-50 p-6">
           <div>
             <h2 className="text-lg font-semibold text-slate-900 mb-3">
-              How Cascade Works
+              Decision Guide
             </h2>
             <div className="space-y-3 text-sm text-slate-700">
               <div className="flex gap-3">
                 <span className="text-xl">1️⃣</span>
                 <div>
-                  <strong>Propose an Action:</strong> Select an agent and describe what you want it to do. You can type naturally or use voice input.
+                  <strong>Select an Acting Agent:</strong> Choose which agent should perform the action. Each agent has different permissions and capabilities (customer-support, finance, inventory, etc.).
                 </div>
               </div>
               <div className="flex gap-3">
                 <span className="text-xl">2️⃣</span>
                 <div>
-                  <strong>Simulation (Not Execution):</strong> Cascade simulates what <em>would</em> happen without making real changes. It shows cascading consequences across agents.
+                  <strong>Describe the Action:</strong> Write what the agent should do in plain language (e.g., "Cancel ORD-10482" or "Issue refund for ORD-10550").
                 </div>
               </div>
               <div className="flex gap-3">
                 <span className="text-xl">3️⃣</span>
                 <div>
-                  <strong>Risk Assessment:</strong> Each action is scored for reversibility, customer impact, and data sensitivity. Policy rules decide if it needs approval.
+                  <strong>Understand Consequence Simulation:</strong> Cascade simulates what would happen without making real changes. It shows all downstream effects across agents, tools, and data.
                 </div>
               </div>
               <div className="flex gap-3">
                 <span className="text-xl">4️⃣</span>
                 <div>
-                  <strong>Review & Decide:</strong> See the complete consequence graph, money movements, and affected entities. Approve or reject the proposed action.
+                  <strong>Review Risk Assessment:</strong> Each action receives a risk score based on money movement, reversibility, customer impact, affected agents, and data sensitivity.
                 </div>
               </div>
               <div className="flex gap-3">
                 <span className="text-xl">5️⃣</span>
                 <div>
-                  <strong>Execute (Demo Only):</strong> In this demo, approved actions update the NovaCart database to show the final state.
+                  <strong>Interpret the Decision:</strong>
+                  <ul className="mt-2 space-y-1 ml-4">
+                    <li><strong>AUTO_APPROVED (green):</strong> Low risk, executes automatically</li>
+                    <li><strong>APPROVAL_REQUIRED (yellow):</strong> Needs human approval before execution</li>
+                    <li><strong>BLOCKED (red):</strong> Not permitted by policy or authorization rules</li>
+                  </ul>
+                </div>
+              </div>
+              <div className="flex gap-3">
+                <span className="text-xl">⚠️</span>
+                <div>
+                  <strong>Simulation vs. Execution:</strong> Simulating an action analyzes consequences but does not execute it. Only approved actions that pass all checks are actually executed in the demo environment.
                 </div>
               </div>
             </div>
-          </div>
-
-          <div className="border-t border-blue-300 pt-4">
-            <h3 className="text-base font-semibold text-slate-900 mb-2">
-              Understanding Results
-            </h3>
-            <ul className="space-y-2 text-sm text-slate-700">
-              <li className="flex gap-2">
-                <span>•</span>
-                <span><strong>Direct Effect:</strong> The immediate result of your proposed action</span>
-              </li>
-              <li className="flex gap-2">
-                <span>•</span>
-                <span><strong>Blast Radius:</strong> How many downstream agents, tools, and entities are affected</span>
-              </li>
-              <li className="flex gap-2">
-                <span>•</span>
-                <span><strong>Consequence Graph:</strong> Visual tree showing which agents reacted to which events</span>
-              </li>
-              <li className="flex gap-2">
-                <span>•</span>
-                <span><strong>Policy Decision:</strong> AUTO (low risk), ASK (needs approval), or BLOCKED (not permitted)</span>
-              </li>
-            </ul>
           </div>
 
           <ActionExplorer onSelectAction={handleActionSelect} />
@@ -209,15 +195,12 @@ function SimulationInput() {
 
           <label className="space-y-2">
             <span className="text-sm font-medium text-slate-700">What should the agent do?</span>
-            <div className="flex gap-2">
-              <input
-                value={text}
-                onChange={(e) => setText(e.target.value)}
-                placeholder="e.g. Cancel ORD-10482, customer wants out"
-                className="flex-1 rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
-              />
-              <VoiceInput onTranscript={(t) => setText(t)} disabled={simulate.isPending} />
-            </div>
+            <input
+              value={text}
+              onChange={(e) => setText(e.target.value)}
+              placeholder="e.g. Cancel ORD-10482, customer wants out"
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-slate-900 placeholder:text-slate-400 focus:border-primary-500 focus:outline-none focus:ring-2 focus:ring-primary-500/20"
+            />
           </label>
         </div>
 

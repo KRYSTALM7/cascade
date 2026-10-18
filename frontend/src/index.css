@@ -1,1 +1,176 @@
 @import "tailwindcss";
+
+/* Cascade Design System - Production Light Theme */
+@layer base {
+  :root {
+    /* Page Structure */
+    --color-page-bg: #F8FAFF;
+    --color-surface: #FFFFFF;
+    --color-border: #E2E8F0;
+
+    /* Text Hierarchy */
+    --color-text-primary: #0F172A;
+    --color-text-secondary: #475569;
+    --color-text-muted: #64748B;
+
+    /* Brand Colors */
+    --color-primary: #6366F1;
+    --color-secondary: #8B5CF6;
+
+    /* Semantic Colors - Backgrounds */
+    --color-success: #10B981;
+    --color-warning: #F59E0B;
+    --color-danger: #EF4444;
+
+    /* Semantic Colors - Text on Light Backgrounds */
+    --color-success-text: #047857;
+    --color-warning-text: #B45309;
+    --color-danger-text: #B91C1C;
+
+    /* Agent Colors (consistent hero and graph) */
+    --color-agent-support: #3B82F6;
+    --color-agent-crm: #A855F7;
+    --color-agent-finance: #10B981;
+    --color-agent-inventory: #F97316;
+  }
+
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, sans-serif;
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    background-color: var(--color-page-bg);
+    color: var(--color-text-primary);
+  }
+}
+
+/* Tailwind v4 theme configuration */
+@theme {
+  /* Primary (Indigo) */
+  --color-primary-50: #eef2ff;
+  --color-primary-100: #e0e7ff;
+  --color-primary-200: #c7d2fe;
+  --color-primary-300: #a5b4fc;
+  --color-primary-400: #818cf8;
+  --color-primary-500: #6366F1;
+  --color-primary-600: #4F46E5;
+  --color-primary-700: #4338ca;
+  --color-primary-800: #3730a3;
+  --color-primary-900: #312e81;
+}
+
+/* Shared component styles */
+.card {
+  @apply bg-white rounded-xl border border-slate-200 shadow-sm;
+}
+
+.card-hover {
+  @apply hover:shadow-md transition-shadow duration-200;
+}
+
+.table thead {
+  @apply bg-slate-50 border-b border-slate-200;
+}
+
+.table thead th {
+  @apply text-slate-900 font-semibold text-sm;
+}
+
+.table tbody tr {
+  @apply border-b border-slate-200 hover:bg-slate-50 transition-colors;
+}
+
+.table tbody td {
+  @apply text-slate-900;
+}
+
+.badge {
+  @apply inline-flex items-center gap-1 px-3 py-1 rounded-lg text-sm font-medium;
+}
+
+/* Motion design */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* Float animation for hero image */
+@keyframes float {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
+
+.animate-float {
+  animation: float 4s ease-in-out infinite;
+}
+
+/* React Flow Controls Styling */
+.react-flow__controls {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 4px !important;
+  opacity: 1 !important;
+}
+
+.react-flow__controls-button {
+  width: 36px !important;
+  height: 36px !important;
+  background: #FFFFFF !important;
+  border: 1px solid #CBD5E1 !important;
+  border-radius: 8px !important;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1) !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  cursor: pointer !important;
+  transition: all 0.15s ease !important;
+  padding: 0 !important;
+}
+
+.react-flow__controls-button:hover:not(:disabled) {
+  background: #EEF2FF !important;
+  border-color: #C7D2FE !important;
+}
+
+.react-flow__controls-button:disabled {
+  cursor: not-allowed !important;
+  opacity: 0.5 !important;
+}
+
+.react-flow__controls-button svg {
+  width: 16px !important;
+  height: 16px !important;
+}
+
+.react-flow__controls-button:not(:disabled) path,
+.react-flow__controls-button:not(:disabled) line,
+.react-flow__controls-button:not(:disabled) polyline {
+  stroke: #334155 !important;
+}
+
+.react-flow__controls-button:hover:not(:disabled) path,
+.react-flow__controls-button:hover:not(:disabled) line,
+.react-flow__controls-button:hover:not(:disabled) polyline {
+  stroke: #4338CA !important;
+}
+
+.react-flow__controls-button:disabled path,
+.react-flow__controls-button:disabled line,
+.react-flow__controls-button:disabled polyline {
+  stroke: #94A3B8 !important;
+}
+
+@media (hover: none) and (pointer: coarse) {
+  .react-flow__controls-button {
+    width: 44px !important;
+    height: 44px !important;
+  }
+}

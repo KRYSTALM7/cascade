@@ -56,6 +56,15 @@ export async function apiFetch<T>(path: string, init: RequestInit = {}): Promise
       const { code, message, details, request_id } = body.error;
       throw new ApiError(response.status, code, message, details ?? {}, request_id ?? requestId);
     }
+    if (response.status === 504) {
+      throw new ApiError(
+        504,
+        "GATEWAY_TIMEOUT",
+        "The Cascade web proxy timed out waiting for the API. No result was returned; please retry.",
+        {},
+        requestId,
+      );
+    }
     throw new ApiError(response.status, "HTTP_ERROR", `Request failed with status ${response.status}.`, {}, requestId);
   }
   return body as T;

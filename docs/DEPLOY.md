@@ -117,7 +117,7 @@ gcloud builds submit frontend --tag $AR/cascade-web:v1
 ```bash
 gcloud run jobs create cascade-migrate --image=$AR/cascade-api:v1 --region=$REGION \
   --set-cloudsql-instances=$SQL_CONN \
-  --set-secrets=DATABASE_URL=cascade-database-url:latest \
+  --set-secrets=DATABASE_URL=cascade-database-url:1 \
   --set-env-vars=ENVIRONMENT=production \
   --command=sh --args=-c,"alembic upgrade head && python -m app.seed --if-empty"
 gcloud run jobs execute cascade-migrate --region=$REGION --wait
@@ -132,14 +132,14 @@ Deterministic rules provider (recommended for the public demo; no LLM cost):
 ```bash
 gcloud run deploy cascade-api --image=$AR/cascade-api:v1 --region=$REGION \
   --add-cloudsql-instances=$SQL_CONN \
-  --set-secrets=DATABASE_URL=cascade-database-url:latest,DEMO_ADMIN_TOKEN=cascade-demo-admin-token:latest \
+  --set-secrets=DATABASE_URL=cascade-database-url:1,DEMO_ADMIN_TOKEN=cascade-demo-admin-token:1 \
   --set-env-vars=ENVIRONMENT=production,DEMO_MODE=true,LLM_PROVIDER=rules,LOG_JSON=true,DB_POOL_SIZE=5,DB_MAX_OVERFLOW=5,CORS_ORIGINS=https://example.invalid \
   --min-instances=1 --max-instances=3 --concurrency=20 --cpu=1 --memory=512Mi \
   --allow-unauthenticated
 export API_URL=$(gcloud run services describe cascade-api --region=$REGION --format='value(status.url)')
 ```
 
-To demonstrate Gemini instead, change these settings: `LLM_PROVIDER=gemini`, add `GEMINI_API_KEY=cascade-gemini-key:latest` to `--set-secrets`, and set a budget, e.g. `LLM_CALL_LIMIT=100,LLM_CALL_WINDOW_SECONDS=3600`. Each instance then sends at most 100 Gemini requests per hour (worst case: limit × `--max-instances`). After that the deterministic rules provider answers, the decision is unchanged, and the parser is recorded as `rules`. Also set a quota or budget alert on the Gemini key in Google Cloud.
+To demonstrate Gemini instead, change these settings: `LLM_PROVIDER=gemini`, add `GEMINI_API_KEY=cascade-gemini-key:1` to `--set-secrets`, and set a budget, e.g. `LLM_CALL_LIMIT=100,LLM_CALL_WINDOW_SECONDS=3600`. Each instance then sends at most 100 Gemini requests per hour (worst case: limit × `--max-instances`). After that the deterministic rules provider answers, the decision is unchanged, and the parser is recorded as `rules`. Also set a quota or budget alert on the Gemini key in Google Cloud.
 
 Notes:
 - `PUBLIC_MODE` is deliberately not set: `ENVIRONMENT=production` turns it on. Setting it explicitly (`PUBLIC_MODE=true`) is also fine.
@@ -162,6 +162,7 @@ nginx renders `BACKEND_URL` into its config at start and proxies `/api`, `/healt
 
 ```bash
 WEB=$(gcloud run services describe cascade-web --region=$REGION --format='value(status.url)')
+gcloud run services update cascade-api --region=$REGION --update-env-vars=CORS_ORIGINS=$WEB
 curl -s $WEB/readyz                       # {"status":"ready","database":"ok"}
 curl -s $WEB/healthz                      # ... "demo_mode":true,"public_mode":true
 curl -s -X POST $WEB/api/demo/reset       # 403 PUBLIC_MODE_RESTRICTED  — must NOT reset

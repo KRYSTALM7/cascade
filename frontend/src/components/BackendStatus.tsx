@@ -35,10 +35,10 @@ export function BackendStatus() {
 
   const style = STYLES[state.kind];
   return (
-    <div role="status" className="inline-flex items-center gap-2 rounded-full border border-slate-800 bg-slate-900 px-3 py-1 text-sm">
+    <div role="status" className="inline-flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-1 text-sm">
       <span aria-hidden className={`h-2 w-2 rounded-full ${style.dot}`} />
       <span>{style.label}</span>
-      {state.kind === "degraded" && <span className="text-slate-400">— {state.message}</span>}
+      {state.kind === "degraded" && <span className="text-slate-600">— {state.message}</span>}
     </div>
   );
 }

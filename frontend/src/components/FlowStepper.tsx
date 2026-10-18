@@ -3,11 +3,11 @@ import type { ActionDetail } from "../api/types";
 type StepState = "done" | "current" | "skipped" | "stopped" | "pending";
 
 const DOT: Record<StepState, string> = {
-  done: "bg-emerald-400 text-slate-950",
-  current: "bg-amber-400 text-slate-950 ring-4 ring-amber-400/20",
-  skipped: "bg-slate-700 text-slate-300",
+  done: "bg-emerald-500 text-white",
+  current: "bg-amber-400 text-slate-900 ring-2 ring-amber-400/30",
+  skipped: "bg-slate-200 text-slate-500",
   stopped: "bg-rose-500 text-white",
-  pending: "bg-slate-800 text-slate-500 ring-1 ring-slate-700",
+  pending: "bg-slate-100 text-slate-400 border border-slate-200",
 };
 
 const ICON: Record<StepState, string> = { done: "✓", current: "•", skipped: "–", stopped: "✕", pending: "" };
@@ -35,14 +35,14 @@ function executionStep(detail: ActionDetail): [StepState, string] {
   return ["pending", "nothing has run"];
 }
 
-/** Where the judge is in the story. Light on purpose: a breadcrumb, not a wizard. */
+/** Compact progress stepper showing the simulation stages */
 export function FlowStepper({ detail }: { detail: ActionDetail }) {
   const decision = detail.decision?.decision;
   const steps: { id: string; label: string; state: StepState; note?: string }[] = [
-    { id: "step-proposed", label: "Proposed action", state: "done" },
-    { id: "step-blast", label: "Simulation", state: "done", note: "nothing executed" },
+    { id: "step-proposed", label: "Proposed", state: "done" },
+    { id: "step-blast", label: "Simulation", state: "done" },
     { id: "step-blast", label: "Blast radius", state: "done" },
-    { id: "step-graph", label: "Consequence graph", state: "done" },
+    { id: "step-graph", label: "Consequences", state: "done" },
     {
       id: "step-decision",
       label: "Risk & decision",
@@ -56,21 +56,21 @@ export function FlowStepper({ detail }: { detail: ActionDetail }) {
   steps.push({ id: "step-execution", label: "Execution", state: execution, note: executionNote });
 
   return (
-    <nav aria-label="Progress" className="overflow-x-auto">
-      <ol className="flex min-w-max items-start gap-1">
+    <nav aria-label="Progress" className="overflow-x-auto pb-1">
+      <ol className="flex min-w-max items-start gap-0.5">
         {steps.map((s, i) => (
           <li key={s.label} className="flex items-start" data-testid={`flow-${s.label}`} data-state={s.state}>
-            <a href={`#${s.id}`} className="group flex items-start gap-2 rounded-md px-1.5 py-1 hover:bg-slate-900">
-              <span className={`mt-0.5 grid h-5 w-5 shrink-0 place-items-center rounded-full text-[11px] font-bold ${DOT[s.state]}`} aria-hidden>
+            <a href={`#${s.id}`} className="group flex items-start gap-1.5 rounded-md px-2 py-1.5 hover:bg-slate-50 transition-colors">
+              <span className={`mt-0.5 grid h-4 w-4 shrink-0 place-items-center rounded-full text-[10px] font-bold ${DOT[s.state]}`} aria-hidden>
                 {ICON[s.state]}
               </span>
               <span className="leading-tight">
-                <span className={`block text-xs font-medium ${s.state === "pending" ? "text-slate-500" : "text-slate-200"}`}>{s.label}</span>
-                {s.note && <span className="block text-[10px] text-slate-500">{s.note}</span>}
+                <span className={`block text-[11px] font-medium ${s.state === "pending" ? "text-slate-400" : "text-slate-700"}`}>{s.label}</span>
+                {s.note && <span className="block text-[9px] text-slate-500">{s.note}</span>}
               </span>
             </a>
             {i < steps.length - 1 && (
-              <span aria-hidden className="mx-1 mt-2.5 h-px w-5 bg-slate-700" />
+              <span aria-hidden className="mx-0.5 mt-2.5 h-px w-3 bg-slate-200" />
             )}
           </li>
         ))}

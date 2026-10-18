@@ -7,7 +7,7 @@ export function RiskBadge({ level, score }: { level: RiskLevel; score?: number }
   return (
     <span className={`${pill} ${LEVEL_STYLE[level]}`}>
       {level}
-      {score !== undefined && <span className="ml-1 font-mono opacity-80">{score}</span>}
+      {score !== undefined && <span className="ml-1 font-mono">{score}</span>}
     </span>
   );
 }
@@ -18,22 +18,22 @@ export function DecisionBadge({ decision }: { decision: Decision }) {
 }
 
 const STATUS_TONE: Partial<Record<ActionStatus, string>> = {
-  EXECUTED: "bg-emerald-500/15 text-emerald-300 ring-emerald-500/40",
-  AUTO_APPROVED: "bg-emerald-500/10 text-emerald-300 ring-emerald-500/30",
-  APPROVED: "bg-sky-500/15 text-sky-300 ring-sky-500/40",
-  PENDING_APPROVAL: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
-  NEEDS_CLARIFICATION: "bg-violet-500/15 text-violet-300 ring-violet-500/40",
-  BLOCKED: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
-  REJECTED: "bg-rose-500/10 text-rose-300 ring-rose-500/30",
-  FAILED: "bg-rose-500/15 text-rose-300 ring-rose-500/40",
-  STALE: "bg-orange-500/15 text-orange-300 ring-orange-500/40",
-  EXPIRED: "bg-orange-500/15 text-orange-300 ring-orange-500/40",
-  PARTIALLY_EXECUTED: "bg-amber-500/15 text-amber-300 ring-amber-500/40",
+  EXECUTED: "bg-emerald-50 text-emerald-700 ring-emerald-600/30",
+  AUTO_APPROVED: "bg-emerald-50 text-emerald-700 ring-emerald-600/30",
+  APPROVED: "bg-sky-50 text-sky-700 ring-sky-600/30",
+  PENDING_APPROVAL: "bg-amber-50 text-amber-700 ring-amber-600/30",
+  NEEDS_CLARIFICATION: "bg-violet-50 text-violet-700 ring-violet-600/30",
+  BLOCKED: "bg-rose-50 text-rose-700 ring-rose-600/30",
+  REJECTED: "bg-rose-50 text-rose-700 ring-rose-600/30",
+  FAILED: "bg-rose-50 text-rose-700 ring-rose-600/30",
+  STALE: "bg-orange-50 text-orange-700 ring-orange-600/30",
+  EXPIRED: "bg-orange-50 text-orange-700 ring-orange-600/30",
+  PARTIALLY_EXECUTED: "bg-amber-50 text-amber-700 ring-amber-600/30",
 };
 
 export function StatusBadge({ status }: { status: ActionStatus }) {
   return (
-    <span data-testid="action-status" className={`${pill} ${STATUS_TONE[status] ?? "bg-slate-500/15 text-slate-300 ring-slate-500/40"}`}>
+    <span data-testid="action-status" className={`${pill} ${STATUS_TONE[status] ?? "bg-slate-50 text-slate-700 ring-slate-600/30"}`}>
       {statusLabel(status)}
     </span>
   );

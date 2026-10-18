@@ -13,9 +13,9 @@ export function ClarificationPrompt({
 }) {
   const [value, setValue] = useState("");
   return (
-    <section aria-label="Clarification needed" className="rounded-xl border border-violet-500/40 bg-violet-500/10 p-4">
-      <h3 className="text-sm font-semibold uppercase tracking-wider text-violet-300">Needs clarification</h3>
-      <p className="mt-1 text-slate-100">{clarification.question}</p>
+    <section aria-label="Clarification needed" className="rounded-xl border border-indigo-200 bg-indigo-50 p-4">
+      <h3 className="text-sm font-semibold uppercase tracking-wider text-indigo-900">Needs clarification</h3>
+      <p className="mt-1 text-slate-700">{clarification.question}</p>
       {clarification.candidates.length > 0 ? (
         <div className="mt-3 flex flex-wrap gap-2">
           {clarification.candidates.map((c) => (
@@ -24,7 +24,7 @@ export function ClarificationPrompt({
               type="button"
               disabled={busy}
               onClick={() => onAnswer({ [c.field]: c.value })}
-              className="rounded-lg border border-violet-400/40 bg-slate-900 px-3 py-1.5 text-sm text-violet-100 hover:bg-violet-500/20 disabled:opacity-50"
+              className="rounded-lg border border-indigo-300 bg-white px-3 py-1.5 text-sm text-indigo-700 hover:bg-indigo-100 disabled:opacity-50"
             >
               {c.label}
             </button>
@@ -43,9 +43,9 @@ export function ClarificationPrompt({
             value={value}
             onChange={(e) => setValue(e.target.value)}
             placeholder={clarification.field}
-            className="flex-1 rounded-lg border border-slate-700 bg-slate-900 px-3 py-1.5 text-slate-100"
+            className="flex-1 rounded-lg border border-slate-300 bg-white px-3 py-1.5 text-slate-900 placeholder:text-slate-400"
           />
-          <button type="submit" disabled={busy} className="rounded-lg bg-violet-500 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-50">
+          <button type="submit" disabled={busy} className="rounded-lg bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50">
             Answer
           </button>
         </form>

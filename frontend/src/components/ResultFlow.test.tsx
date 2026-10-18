@@ -30,7 +30,7 @@ describe("FlowStepper", () => {
   it("shows a pending approval as the current step and execution as not yet run", () => {
     renderWithProviders(<FlowStepper detail={as(hidden)} />);
     expect(screen.getByRole("navigation", { name: "Progress" })).toBeInTheDocument();
-    for (const label of ["Proposed action", "Simulation", "Blast radius", "Consequence graph", "Risk & decision"]) expect(state(label)).toBe("done");
+    for (const label of ["Proposed", "Simulation", "Blast radius", "Consequences", "Risk & decision"]) expect(state(label)).toBe("done");
     expect(state("Approval")).toBe("current");
     expect(state("Execution")).toBe("pending");
   });
@@ -52,7 +52,7 @@ describe("Execution", () => {
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(jsonResponse(200, ORDER)));
     renderWithProviders(<Execution detail={as(hidden)} />);
     expect(screen.getByTestId("nothing-ran")).toHaveTextContent("Nothing has run yet. Cascade has only simulated");
-    expect(screen.queryByRole("button", { name: /Reset demo data/ })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: /Reset/ })).not.toBeInTheDocument();
   });
 
   it("lists what ran in plain words and offers a clean replay", async () => {
@@ -64,7 +64,7 @@ describe("Execution", () => {
       expect(steps).toHaveTextContent(text);
     }
     expect(steps).toHaveTextContent("Finance agent");
-    await userEvent.click(screen.getByRole("button", { name: "Reset demo data & run this again" }));
+    await userEvent.click(screen.getByRole("button", { name: "Reset & run this again" }));
     expect(fetchMock.mock.calls.map(([u]) => u)).toContain("/api/demo/reset");
   });
 });

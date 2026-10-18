@@ -56,10 +56,72 @@ describe("what-if presets", () => {
     expect(screen.queryByTestId("recommended")).not.toBeInTheDocument();
     expect(verdict).not.toHaveTextContent("Safer alternative");
     const table = screen.getByRole("table");
-    for (const text of ["Exposure₹72,000.00₹14,400.00", "Downstream actions51", "Agents affected31", "RiskHIGH · 68/100MEDIUM · 52/100", "DecisionApproval requiredApproval required"]) {
+    for (const cell of within(table).getAllByRole("cell")) {
+      expect(cell).toHaveClass("text-slate-900");
+    }
+    for (const text of ["Exposure₹72,000.00₹14,400.00", "Downstream actions51", "Agents affected3 — CRM agent, Finance agent, Inventory agent1 — CRM agent", "RiskHIGH · 68/100MEDIUM · 52/100", "DecisionApproval requiredApproval required"]) {
       expect(table).toHaveTextContent(text);
     }
     expect(screen.getByRole("link", { name: "Open the alternative →" })).toHaveAttribute("href", `/simulate?action=${result.alternative.action.id}`);
+  });
+
+  it("submits the custom alternative text and labels the results with that exact request", async () => {
+    const fetchMock = vi.fn().mockResolvedValue(jsonResponse(200, result));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<WhatIfPanel actionId={detail.action.id} baseToolId={detail.action.tool_id} />);
+
+    const input = screen.getByRole("textbox", { name: "Alternative" });
+    const compareButton = screen.getByRole("button", { name: "Compare" });
+    expect(compareButton).toBeDisabled();
+    await userEvent.type(input, "Keep the order and give 10% compensation");
+    expect(compareButton).toBeEnabled();
+    await userEvent.click(compareButton);
+
+    const [, init] = fetchMock.mock.calls[0] as [string, RequestInit];
+    expect(JSON.parse(String(init.body))).toEqual({ text: "Keep the order and give 10% compensation" });
+    expect(await screen.findByTestId("what-if-compared-text")).toHaveTextContent(
+      "Comparison for: Keep the order and give 10% compensation",
+    );
+    expect(screen.getByTestId("what-if-result")).toBeInTheDocument();
+  });
+
+  it("clears stale results on failure and lets the user retry", async () => {
+    const fetchMock = vi.fn()
+      .mockResolvedValueOnce(jsonResponse(200, result))
+      .mockResolvedValueOnce(jsonResponse(422, {
+        error: { code: "WHAT_IF_NEEDS_CLARIFICATION", message: "Describe the alternative more precisely.", details: {}, request_id: "req-123" },
+      }))
+      .mockResolvedValueOnce(jsonResponse(200, result));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<WhatIfPanel actionId={detail.action.id} preset={SCENARIOS[0]!.whatIf} />);
+
+    await userEvent.click(screen.getByRole("button", { name: "Compare this alternative" }));
+    expect(await screen.findByTestId("what-if-result")).toBeInTheDocument();
+    const input = screen.getByRole("textbox", { name: "Alternative" });
+    await userEvent.type(input, "Ambiguous alternative");
+    await userEvent.click(screen.getByRole("button", { name: "Compare" }));
+    expect(await screen.findByRole("alert")).toHaveTextContent("WHAT_IF_NEEDS_CLARIFICATION");
+    expect(screen.queryByTestId("what-if-result")).not.toBeInTheDocument();
+    expect(screen.getByRole("alert")).toHaveTextContent("Request ID: req-123");
+
+    await userEvent.click(screen.getByRole("button", { name: "Compare" }));
+    expect(await screen.findByTestId("what-if-result")).toBeInTheDocument();
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+  });
+
+  it("shows pending state and prevents duplicate comparisons", async () => {
+    const fetchMock = vi.fn(() => new Promise<Response>(() => {}));
+    vi.stubGlobal("fetch", fetchMock);
+    renderWithProviders(<WhatIfPanel actionId={detail.action.id} />);
+    const input = screen.getByRole("textbox", { name: "Alternative" });
+    await userEvent.type(input, "A safer alternative");
+    const button = screen.getByRole("button", { name: "Compare" });
+    await userEvent.click(button);
+
+    expect(await screen.findByRole("status")).toHaveTextContent("Comparing this alternative");
+    expect(input).toBeDisabled();
+    expect(button).toBeDisabled();
+    expect(fetchMock).toHaveBeenCalledTimes(1);
   });
 
   it("never recommends an alternative that is blocked, even if its risk score is lower", async () => {

@@ -16,6 +16,7 @@ from app.domain.enums import ActionStatus, ActorType
 from app.domain.tools.registry import SIMULATORS
 from app.llm.guards import to_tool_call
 from app.llm.provider import LLMOutputInvalidError, LLMUnavailableError
+from app.llm.rules import RulesProvider
 from app.llm.schemas import ExplainInput, WhatIfContext
 from app.models import Action, InventoryItem, User
 from app.repositories.world import load_catalog
@@ -140,7 +141,9 @@ class WhatIfService:
         alt_outcome = simulate_and_persist(self.ctx, alt, user.id)
 
         base_side, alt_side = side(base, base_outcome), side(alt, alt_outcome)
-        narrative = self.ctx.llm.explain(
+        # Alternative interpretation already used the request's one bounded LLM call. The
+        # comparison narrative is deterministic and uses only the computed comparison facts.
+        narrative = RulesProvider().explain(
             ExplainInput(
                 kind="comparison", base=base_outcome.facts(), alternative=alt_outcome.facts()
             )

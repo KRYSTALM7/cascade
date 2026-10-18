@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import json
 import os
+import sys
 from collections.abc import Sequence
+from types import ModuleType
 from typing import Any
 
 import httpx
@@ -15,7 +17,7 @@ from app.domain.policy.engine import decide
 from app.domain.risk.scorer import score_report
 from app.domain.validation.clarification import CustomerBrief, OrderBrief, resolve
 from app.llm.facts import outcome_facts
-from app.llm.gemini import GeminiProvider, sdk_transport
+from app.llm.gemini import GeminiProvider, rotating_transport, sdk_transport
 from app.llm.guards import (
     injection_markers,
     parse_llm_json,
@@ -24,7 +26,7 @@ from app.llm.guards import (
 )
 from app.llm.provider import LLMOutputInvalidError, LLMUnavailableError
 from app.llm.rules import RulesProvider
-from app.llm.schemas import ExplainInput, Explanation, LLMIntent, ParseContext
+from app.llm.schemas import ExplainInput, Explanation, LLMIntent, ParseContext, WhatIfContext
 from app.seed import novacart_data as data
 from tests.factories import POLICY, hero, novacart_snapshot, simulate
 
@@ -51,6 +53,14 @@ def parse(text: str) -> tuple[str | None, dict[str, Any], list[str], str | None]
 @pytest.mark.parametrize(
     ("text", "tool", "params"),
     [
+        (
+            "Change the laptop quantity to 1 on ORD-10550, customer only needs one",
+            "modify_order",
+            {
+                "order_id": "ORD-10550",
+                "lines": [{"sku": "SKU-LAP-001", "quantity": 1}],
+            },
+        ),
         ("Cancel ORD-10482, customer wants out", "cancel_order", {"order_id": "ORD-10482"}),
         ("please cancel ord-10510", "cancel_order", {"order_id": "ORD-10510"}),
         (
@@ -69,6 +79,17 @@ def parse(text: str) -> tuple[str | None, dict[str, Any], list[str], str | None]
             {"order_id": "ORD-10482", "percentage": "20"},
         ),
         ("Issue a refund for ORD-10482", "issue_refund", {"order_id": "ORD-10482"}),
+        (
+            "Send CUST-1005 an SMS that ORD-10501 has shipped",
+            "send_customer_notification",
+            {
+                "customer_id": "CUST-1005",
+                "order_id": "ORD-10501",
+                "template": "ORDER_SHIPPED",
+                "channel": "SMS",
+            },
+        ),
+        ("Cancel ORD-10510", "cancel_order", {"order_id": "ORD-10510"}),
         ("Reverse payment PAY-90482", "reverse_payment", {"payment_id": "PAY-90482"}),
     ],
 )
@@ -92,6 +113,30 @@ def test_rules_provider_reports_customer_names_for_clarification() -> None:
 def test_rules_provider_unknown_text() -> None:
     assert RULES.parse_intent("what a lovely day", CTX).intent == "unknown"
     assert to_tool_call(RULES.parse_intent("what a lovely day", CTX)).tool_id is None
+
+
+def test_rules_provider_flags_multiple_product_matches_instead_of_choosing_one() -> None:
+    intent = RULES.parse_intent("Change laptop and watch quantity to 1 on ORD-10550", CTX)
+    call = to_tool_call(intent)
+    assert call.tool_id == "modify_order"
+    assert call.missing == ["lines"]
+    assert call.ambiguities == ["Several products match: SKU-LAP-001, SKU-WAT-003."]
+
+
+def test_rules_what_if_inherits_only_the_compared_order_id() -> None:
+    context = WhatIfContext(
+        agent_id="customer-support",
+        base_tool="modify_order",
+        base_params={"order_id": "ORD-10550"},
+        permitted_tools=SUPPORT_TOOLS,
+        catalog_tools=sorted(t["id"] for t in data.TOOLS),
+        products={i["sku"]: i["name"] for i in data.INVENTORY},
+    )
+    intent = RULES.interpret_what_if("What if we give 10% compensation instead?", context)
+    call = to_tool_call(intent)
+    assert call.tool_id == "issue_compensation"
+    assert call.params == {"order_id": "ORD-10550", "percentage": "10"}
+    assert call.missing == []
 
 
 # --- guards: SEC-01..05 -------------------------------------------------------------------------
@@ -225,6 +270,79 @@ def test_gemini_client_errors_are_not_retried() -> None:
     with pytest.raises(LLMUnavailableError):
         provider.parse_intent("Cancel ORD-10482", CTX)
     assert len(calls) == 1
+
+
+def test_rotating_transport_tries_next_key_after_transient_failure(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempted: list[str] = []
+
+    class FakeModels:
+        def __init__(self, key: str) -> None:
+            self.key = key
+
+        def generate_content(self, **_: Any) -> Any:
+            attempted.append(self.key)
+            if self.key == "first-key":
+                raise FakeAPIError(429)
+            return type("Response", (), {"text": "rotated"})()
+
+    class FakeClient:
+        def __init__(self, *, api_key: str, http_options: Any) -> None:
+            self.models = FakeModels(api_key)
+
+    google = ModuleType("google")
+    genai = ModuleType("google.genai")
+    genai.Client = FakeClient  # type: ignore[attr-defined]
+    types = ModuleType("google.genai.types")
+    types.HttpOptions = lambda **_: None  # type: ignore[attr-defined]
+    types.HttpRetryOptions = lambda **_: None  # type: ignore[attr-defined]
+    types.GenerateContentConfig = lambda **_: None  # type: ignore[attr-defined]
+    google.genai = genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", google)
+    monkeypatch.setitem(sys.modules, "google.genai", genai)
+    monkeypatch.setitem(sys.modules, "google.genai.types", types)
+    transport = rotating_transport(["first-key", "second-key"], "model", 1.0)
+
+    assert transport("system", "payload", {}) == "rotated"
+    assert attempted == ["first-key", "second-key"]
+
+
+def test_rotating_transport_bounds_timeout_retries_to_two_keys(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    attempted: list[str] = []
+
+    class FakeModels:
+        def __init__(self, key: str) -> None:
+            self.key = key
+
+        def generate_content(self, **_: Any) -> Any:
+            attempted.append(self.key)
+            raise FakeAPIError(503)
+
+    class FakeClient:
+        def __init__(self, *, api_key: str, http_options: Any) -> None:
+            self.models = FakeModels(api_key)
+
+    google = ModuleType("google")
+    genai = ModuleType("google.genai")
+    genai.Client = FakeClient  # type: ignore[attr-defined]
+    types = ModuleType("google.genai.types")
+    types.HttpOptions = lambda **_: None  # type: ignore[attr-defined]
+    types.HttpRetryOptions = lambda **_: None  # type: ignore[attr-defined]
+    types.GenerateContentConfig = lambda **_: None  # type: ignore[attr-defined]
+    google.genai = genai  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "google", google)
+    monkeypatch.setitem(sys.modules, "google.genai", genai)
+    monkeypatch.setitem(sys.modules, "google.genai.types", types)
+    provider = GeminiProvider(
+        rotating_transport(["first-key", "second-key", "third-key"], "model", 1.0)
+    )
+
+    with pytest.raises(LLMUnavailableError):
+        provider.parse_intent("Cancel ORD-10482", CTX)
+    assert attempted == ["first-key", "second-key"]
 
 
 # --- explanations: SEC-06 numeric guard ----------------------------------------------------------

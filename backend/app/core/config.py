@@ -53,6 +53,8 @@ class Settings(BaseSettings):
 
     llm_provider: LLMProviderName = LLMProviderName.RULES
     gemini_api_key: SecretStr | None = None
+    # Comma-separated list of fallback API keys for rotation
+    gemini_api_keys: Annotated[list[SecretStr], NoDecode] | None = None
     gemini_model: str = "gemini-3.8-flash"
     llm_timeout_seconds: float = Field(default=10.0, gt=0, le=60)
     # Gemini budget per process: at most `llm_call_limit` Gemini requests per window; beyond it
@@ -96,6 +98,16 @@ class Settings(BaseSettings):
             return None
         return value
 
+    @field_validator("gemini_api_keys", mode="before")
+    @classmethod
+    def _parse_api_keys_csv(cls, value: object) -> object:
+        """Parse comma-separated API keys from env var."""
+        if isinstance(value, str) and value.strip():
+            # Split by comma and filter out blank keys
+            keys = [k.strip() for k in value.split(",") if k.strip()]
+            return [SecretStr(k) for k in keys] if keys else None
+        return value
+
     @field_validator("public_mode", mode="before")
     @classmethod
     def _blank_public_mode_is_unset(cls, value: object) -> object:
@@ -120,9 +132,25 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _gemini_needs_key(self) -> Self:
-        if self.llm_provider is LLMProviderName.GEMINI and not self.gemini_api_key:
-            raise ValueError("LLM_PROVIDER=gemini requires GEMINI_API_KEY to be set")
+        if (
+            self.llm_provider is LLMProviderName.GEMINI
+            and not self.gemini_api_key
+            and not self.gemini_api_keys
+        ):
+            raise ValueError(
+                "LLM_PROVIDER=gemini requires GEMINI_API_KEY or GEMINI_API_KEYS to be set"
+            )
         return self
+
+    @property
+    def all_gemini_keys(self) -> list[str]:
+        """Get all configured Gemini API keys (primary + fallbacks)."""
+        keys = []
+        if self.gemini_api_key:
+            keys.append(self.gemini_api_key.get_secret_value())
+        if self.gemini_api_keys:
+            keys.extend(k.get_secret_value() for k in self.gemini_api_keys)
+        return keys
 
 
 @lru_cache

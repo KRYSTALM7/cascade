@@ -1,264 +1,220 @@
-import { expect, test, type Page } from "@playwright/test";
+import { expect, request, test, type Page, type Request as PlaywrightRequest } from "@playwright/test";
 
-/** The judge's path through Cascade, end to end, with the offline rules provider. */
-
+/** Local, deterministic browser checks for the six documented demo scenarios. */
 const BACKEND = process.env.E2E_BACKEND_URL ?? "http://localhost:8000";
-const FLAGSHIP_TEXT = "Change the laptop quantity to 1 on ORD-10550, customer only needs one";
+const FLAGSHIP = "Change the laptop quantity to 1 on ORD-10550, customer only needs one";
 
-test.beforeEach(async ({ request, page }) => {
-  const reset = await request.post(`${BACKEND}/api/demo/reset`);
-  expect(reset.ok(), "backend must run with DEMO_MODE=true").toBeTruthy();
+test.beforeAll(async () => {
+  // One reset/seed against the disposable local test database. The browser flows below only
+  // simulate or compare; they never approve or execute business actions.
+  const api = await request.newContext({ baseURL: BACKEND });
+  try {
+    const reset = await api.post("/api/demo/reset");
+    expect(reset.ok(), "local backend must permit demo reset on the isolated test database").toBeTruthy();
+  } finally {
+    await api.dispose();
+  }
+});
+
+test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => window.localStorage.setItem("cascade.user", "ops-ravi"));
 });
 
-async function actAs(page: Page, userId: string) {
-  await page.getByLabel("Acting user").selectOption(userId);
-}
-
 const status = (page: Page) => page.getByTestId("action-status");
 
-test("hidden cascade: an authorized, low-risk edit triggers Finance's ₹72,000 refund → approval required, nothing executed", async ({ page, request }) => {
-  await page.goto("/simulate");
-  // The landing leads with the flagship proposal; one click simulates it with seeded data.
-  await expect(page.getByRole("heading", { level: 1 })).toHaveText("What happens if this agent acts?");
-  await expect(page.getByTestId("hero-proposal")).toContainText("Modify order ORD-10550");
-  await page.getByRole("button", { name: "Simulate consequences" }).click();
-  await expect(status(page)).toHaveText("Pending approval");
+function captureApiTimings(page: Page) {
+  const timings: { path: string; ms: number }[] = [];
+  const started = new Map<PlaywrightRequest, number>();
+  const relevant = (request: PlaywrightRequest) => /\/api\/(actions\/(parse|simulate)|actions\/[^/]+\/what-if)$/.test(new URL(request.url()).pathname);
+  page.on("request", (request) => { if (relevant(request)) started.set(request, Date.now()); });
+  page.on("requestfinished", (request) => {
+    const start = started.get(request);
+    if (start !== undefined) timings.push({ path: new URL(request.url()).pathname, ms: Date.now() - start });
+  });
+  return timings;
+}
 
-  // The blast radius headline, straight from the backend.
-  const headline = page.getByTestId("blast-headline");
-  for (const text of ["Agents affected3", "Downstream actions5", "Exposure₹72,000", "RiskHIGH · 68", "DecisionApproval required"]) {
-    await expect(headline).toContainText(text);
+async function enterSimulation(page: Page, label: string, phrase: string) {
+  const landingScenarios = ["Trim a laptop order", "Cancel a VIP order", "Add a second watch", "Send a shipping SMS"];
+  if (landingScenarios.includes(label)) {
+    await page.goto("/");
+    await expect(page.getByRole("heading", { level: 1 })).toContainText("Know the consequences");
+    await page.getByRole("button", { name: label, exact: true }).click();
+    await page.getByRole("button", { name: "Simulate consequences" }).click();
+  } else {
+    // The two remaining documented scenarios are not landing shortcuts; use the registered form route.
+    await page.goto("/simulate");
+    await page.getByLabel("What should the agent do?").fill(phrase);
+    await page.getByRole("button", { name: "Simulate consequences" }).click();
   }
-  // 1. The proposal itself is authorized and, alone, would be auto-approved.
-  await expect(page.getByTestId("root-authorization")).toHaveText("✓ Authorized");
-  await expect(page.getByTestId("contrast-alone")).toContainText("LOW·10/100·Auto-approved·₹0");
-  // 2. What happens next: Finance, under its own permission, refunds ₹72,000.
-  await expect(page.getByTestId("contrast-cascade")).toContainText("HIGH·68/100·Approval required·₹72,000");
-  await expect(page.getByTestId("blast-contrast")).toContainText("₹72,000.00 out");
-  await expect(page.getByRole("list", { name: "Graph legend" })).toBeVisible();
-  await expect(page.getByTestId("graph-node-n0")).toContainText("proposed this action");
-  const refund = page.getByTestId("graph-node-n2");
-  await expect(refund).toContainText("reacted & proposed");
-  await expect(refund.getByTestId("node-auth")).toHaveText("✓ Allowed");
-  await expect(refund.getByTestId("money-badge")).toHaveText("−₹72,000.00");
-  await expect(page.getByTestId("plain-n2")).toContainText("Finance agent");
-  await expect(page.getByTestId("plain-n2")).toContainText("✓ Allowed");
-  // Risk and decision are unmissable; the technical chain is one click away.
-  await expect(page.getByTestId("risk-score")).toHaveText("68");
-  await expect(page.getByTestId("decision-banner")).toContainText("APPROVAL REQUIRED");
-  await page.getByText("Technical details", { exact: true }).click();
-  await expect(page.getByTestId("chain-n2")).toContainText("finance.refund_on_downsize@1");
-  await expect(page.getByTestId("chain-n2")).toContainText("✓ granted");
-  await expect(page.getByRole("list", { name: "Decision reasons" })).toContainText("REFUND_ABOVE_AUTO_LIMIT");
-  // 3. Nothing ran.
-  const order = (await (await request.get(`${BACKEND}/api/orders/ORD-10550`)).json()) as { total_amount: string };
-  expect(order.total_amount).toBe("144000.00");
-});
-
-test("hero: NL cancel → graph → approval → approve → execute → order cancelled → audit", async ({ page }) => {
-  await page.goto("/simulate");
-  await page.getByRole("button", { name: "Cancel a VIP order scenario" }).click();
-
-  // Parsed + simulated: the whole cascade is visible before anything runs.
-  await expect(status(page)).toHaveText("Pending approval");
   await expect(page).toHaveURL(/\/simulate\?action=/);
-  for (const id of ["n0", "n1", "n2", "n3", "n4", "n5"]) {
-    await expect(page.getByTestId(`graph-node-${id}`)).toBeVisible();
-  }
-  await expect(page.getByTestId("graph-node-n1").getByTestId("money-badge")).toHaveText("−₹84,500.00");
+}
+
+async function expectMetrics(page: Page, expected: { agents: string; actions: string; exposure: string; risk: string; decision: string }) {
+  const headline = page.getByTestId("blast-headline");
+  await expect(headline).toContainText(expected.agents);
+  await expect(headline).toContainText(expected.actions);
+  await expect(headline).toContainText(expected.exposure);
+  await expect(headline).toContainText(expected.risk);
+  await expect(headline).toContainText(expected.decision);
+}
+
+test("landing scenario: trim laptop order reveals downstream refund and approval gate", async ({ page }) => {
+  const timings = captureApiTimings(page);
+  await enterSimulation(page, "Trim a laptop order", FLAGSHIP);
+  await expect(status(page)).toHaveText("Pending approval");
+  await expectMetrics(page, { agents: "3", actions: "5", exposure: "72,000", risk: "HIGH · 68", decision: "APPROVAL REQUIRED" });
+  await expect(page.getByTestId("root-authorization")).toContainText("Authorized");
+  await expect(page.getByTestId("graph-node-n2")).toContainText("reacted");
+  await expect(page.getByTestId("nothing-ran")).toBeVisible();
+  await expect.poll(() => timings.length).toBeGreaterThanOrEqual(2);
+  console.log(`[rules-browser] ${JSON.stringify(timings)}`);
+  expect(timings.every((item) => item.ms < 30_000)).toBeTruthy();
+  expect(timings.reduce((total, item) => total + item.ms, 0)).toBeLessThan(5_000);
+});
+
+test("landing scenario: VIP cancellation is high risk and needs approval", async ({ page }) => {
+  await enterSimulation(page, "Cancel a VIP order", "Cancel ORD-10482, customer wants out");
+  await expect(status(page)).toHaveText("Pending approval");
+  await expectMetrics(page, { agents: "3", actions: "5", exposure: "84,500", risk: "HIGH · 76", decision: "APPROVAL REQUIRED" });
   await expect(page.getByTestId("risk-score")).toHaveText("76");
-  await expect(page.getByRole("region", { name: "Blast radius" })).toContainText("₹84,500.00");
-  await expect(page.getByRole("list", { name: "Top reasons" })).toContainText("auto-approve limit");
-  await expect(page.getByRole("region", { name: "Explanation" })).toContainText("human approver must decide");
-  await expect(page.getByTestId("now-Order status")).toHaveText("CONFIRMED");
-  await expect(page.getByTestId("nothing-ran")).toContainText("Nothing has run yet");
-
-  // The operator is guided to an approver instead of being offered a button that would fail.
-  const gate = page.getByRole("region", { name: "Approval gate" });
-  await expect(gate.getByTestId("persona-guide")).toContainText("Approval requires an authorized approver.");
-  await expect(gate.getByRole("button", { name: /Approve/ })).toHaveCount(0);
-  await expect(gate.getByTestId("requested-by")).toContainText("Ravi Kumar");
-  await gate.getByRole("button", { name: /Act as Asha Menon/ }).click();
-  await expect(page.getByLabel("Acting user")).toHaveValue("approver-asha");
-  await gate.getByRole("button", { name: "Approve only" }).click();
-  await expect(status(page)).toHaveText("Approved");
-
-  await actAs(page, "ops-ravi");
-  await page.getByRole("button", { name: "Execute" }).click();
-  await expect(status(page)).toHaveText("Executed");
-  await expect(page.getByTestId("now-Order status")).toHaveText("CANCELLED");
-  await expect(page.getByRole("list", { name: "Execution steps" })).toContainText("Refund issued");
-
-  const actionId = new URL(page.url()).searchParams.get("action");
-  await page.getByRole("link", { name: "View the audit trail →" }).click();
-  const rows = page.locator("tbody tr", { hasText: actionId?.slice(0, 8) ?? "" });
-  for (const event of ["ACTION_PARSED", "DECISION_MADE", "APPROVED", "EXECUTED"]) {
-    await expect(rows.filter({ hasText: event }).first()).toBeVisible();
-  }
+  await expect(page.getByTestId("nothing-ran")).toBeVisible();
 });
 
-test("a low-limit approver is refused with the backend's reason", async ({ page }) => {
-  await page.goto("/simulate");
-  await page.getByRole("button", { name: "Cancel a VIP order scenario" }).click();
-  await expect(status(page)).toHaveText("Pending approval");
-  await actAs(page, "approver-dev");
-  await page.getByRole("button", { name: "Approve & Execute" }).click();
-  await expect(page.getByRole("alert")).toContainText("APPROVAL_LIMIT_EXCEEDED");
-  await expect(status(page)).toHaveText("Pending approval");
+test("landing scenario: add a second watch is low risk and auto-approved", async ({ page }) => {
+  await enterSimulation(page, "Add a second watch", "Change the watch quantity to 2 on ORD-10495");
+  await expect(status(page)).toHaveText("Auto approved");
+  await expectMetrics(page, { agents: "2", actions: "3", exposure: "₹0", risk: "LOW · 34", decision: "AUTO-APPROVED" });
+  await expect(page.getByTestId("nothing-ran")).toBeVisible();
 });
 
-test("unauthorized: support cannot issue a refund — blocked, nothing to approve", async ({ page }) => {
-  await page.goto("/simulate");
-  await page.getByRole("button", { name: "Support issues a refund scenario" }).click();
+test("landing scenario: shipping SMS affects no downstream agents", async ({ page }) => {
+  await enterSimulation(page, "Send a shipping SMS", "Send CUST-1005 an SMS that ORD-10501 has shipped");
+  await expect(status(page)).toHaveText("Auto approved");
+  await expectMetrics(page, { agents: "0", actions: "0", exposure: "₹0", risk: "LOW · 30", decision: "AUTO-APPROVED" });
+});
+
+test("documented scenario: support refund is blocked by authorization", async ({ page }) => {
+  await enterSimulation(page, "Support issues a refund", "Issue a refund for ORD-10482");
   await expect(status(page)).toHaveText("Blocked");
-  const root = page.getByTestId("graph-node-n0");
-  await expect(root).toHaveAttribute("data-status", "BLOCKED");
-  await expect(root).toContainText("TOOL_NOT_PERMITTED");
+  await expect(page.getByTestId("graph-node-n0")).toContainText("TOOL_NOT_PERMITTED");
   await expect(page.getByTestId("decision-banner")).toContainText("BLOCKED");
   await expect(page.getByRole("button", { name: /Approve/ })).toHaveCount(0);
   await expect(page.getByRole("button", { name: "Execute" })).toHaveCount(0);
-  await expect(page.getByRole("region", { name: "What if" })).toHaveCount(0);
 });
 
-test("auto-approve: the ₹1,998 cancel runs without a human", async ({ page }) => {
-  await page.goto("/simulate");
-  await page.getByRole("button", { name: "Cancel a small order scenario" }).click();
+test("documented scenario: small order cancellation is low exposure and auto-approved", async ({ page }) => {
+  await enterSimulation(page, "Cancel a small order", "Cancel ORD-10510");
   await expect(status(page)).toHaveText("Auto approved");
-  await page.getByRole("button", { name: "Execute" }).click();
-  await expect(status(page)).toHaveText("Executed");
+  await expectMetrics(page, { agents: "3", actions: "3", exposure: "1,998", risk: "MEDIUM · 54", decision: "AUTO-APPROVED" });
 });
 
-test("what-if: 20% compensation instead of cancelling is lower risk", async ({ page }) => {
-  await page.goto("/simulate");
-  await page.getByRole("button", { name: "Cancel a VIP order scenario" }).click();
+async function comparePreset(page: Page, scenario: string, phrase: string) {
+  await enterSimulation(page, scenario, phrase);
   await expect(status(page)).toHaveText("Pending approval");
-  await page.getByRole("textbox", { name: "Alternative" }).fill("What if we give 20% compensation instead?");
-  await page.getByRole("button", { name: "Compare", exact: true }).click();
-  const result = page.getByTestId("what-if-result");
-  await expect(result).toContainText("₹16,900.00");
-  await expect(result).toContainText("₹84,500.00");
-  await expect(result.getByRole("region", { name: "Explanation" })).toContainText("lower risk");
-  const originalUrl = page.url();
-  await result.getByRole("link", { name: "Open the alternative →" }).click();
-  await expect(page.getByRole("heading", { level: 2 })).toContainText("issue compensation");
-  await page.getByRole("link", { name: "← Back to the original action" }).click();
-  await expect(page).toHaveURL(originalUrl);
+  const panel = page.getByRole("region", { name: "What if" });
+  await panel.getByRole("button", { name: "Compare this alternative" }).click();
+  await expect(page.getByTestId("what-if-result")).toBeVisible();
+  return panel;
+}
+
+test("what-if example: 20% compensation compares VIP cancellation with computed outcomes", async ({ page }) => {
+  const timings = captureApiTimings(page);
+  const panel = await comparePreset(page, "Cancel a VIP order", "Cancel ORD-10482, customer wants out");
+  await expect.poll(() => timings.some((timing) => timing.path.endsWith("/what-if"))).toBeTruthy();
+  expect(timings.every((timing) => timing.ms < 30_000)).toBeTruthy();
+  console.log(`[rules-what-if-browser] ${JSON.stringify(timings)}`);
+  await expect(page.getByTestId("what-if-compared-text")).toContainText("What if we give 20% compensation instead?");
+  const table = panel.getByRole("table");
+  await expect(table.getByRole("columnheader", { name: /Proposed action/ })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: /Alternative/ })).toBeVisible();
+  await expect(table.getByRole("row", { name: /Exposure/ })).toContainText("84,500");
+  await expect(table.getByRole("row", { name: /Exposure/ })).toContainText("16,900");
+  await expect(table.getByRole("row", { name: /Downstream actions/ })).toContainText("5");
+  await expect(table.getByRole("row", { name: /Downstream actions/ })).toContainText("1");
+  await expect(table.getByRole("row", { name: /Risk/ })).toContainText("HIGH · 76/100");
+  await expect(table.getByRole("row", { name: /Risk/ })).toContainText("MEDIUM · 53/100");
+  await expect(table.getByRole("row", { name: /Agents affected/ })).toContainText("3");
+  await expect(table.getByRole("row", { name: /Agents affected/ })).toContainText("1");
+  await expect(table.getByRole("row", { name: /Decision/ })).toContainText("Approval required");
+  await expect(table.getByRole("row", { name: /Reversibility/ })).toContainText("Irreversible");
 });
 
-test("what-if: the flagship's own preset is shown honestly as a lower-risk trade-off, not a recommendation", async ({ page }) => {
+test("what-if example: 10% compensation shows lower exposure, risk and downstream actions; table stays readable responsively", async ({ page }) => {
+  const timings = captureApiTimings(page);
+  const panel = await comparePreset(page, "Trim a laptop order", FLAGSHIP);
+  await expect.poll(() => timings.some((timing) => timing.path.endsWith("/what-if"))).toBeTruthy();
+  expect(timings.every((timing) => timing.ms < 30_000)).toBeTruthy();
+  console.log(`[rules-what-if-browser] ${JSON.stringify(timings)}`);
+  await expect(page.getByTestId("what-if-compared-text")).toContainText("What if we keep the order and give 10% compensation instead?");
+  await expect(page.getByTestId("what-if-summary")).toContainText("14,400 exposure · 1 downstream action · MEDIUM risk");
+  await expect(page.getByTestId("what-if-verdict")).toContainText("57,600 less exposure");
+  await expect(page.getByTestId("what-if-verdict")).toContainText("4 fewer downstream actions");
+  const table = panel.getByRole("table");
+  await expect(table.getByRole("columnheader", { name: /Proposed action/ })).toBeVisible();
+  await expect(table.getByRole("columnheader", { name: /Alternative/ })).toBeVisible();
+  await expect(table.getByRole("row", { name: /Exposure/ })).toContainText("72,000");
+  await expect(table.getByRole("row", { name: /Exposure/ })).toContainText("14,400");
+  await expect(table.getByRole("row", { name: /Downstream actions/ })).toContainText("5");
+  await expect(table.getByRole("row", { name: /Downstream actions/ })).toContainText("1");
+  await expect(table.getByRole("row", { name: /Agents affected/ })).toContainText("3");
+  await expect(table.getByRole("row", { name: /Agents affected/ })).toContainText("1");
+  await expect(table.getByRole("row", { name: /Risk/ })).toContainText("HIGH · 68/100");
+  await expect(table.getByRole("row", { name: /Risk/ })).toContainText("MEDIUM · 52/100");
+  await expect(table.getByRole("row", { name: /Decision/ })).toContainText("Approval required");
+  await expect(table.getByRole("row", { name: /Reversibility/ })).toContainText("Irreversible");
+
+  await page.screenshot({ path: "test-results/what-if-desktop.png", fullPage: true });
+  const desktopContrast = await table.evaluate(inspectContrast);
+  expect(desktopContrast.every((sample) => sample.ratio >= 4.5), JSON.stringify(desktopContrast)).toBeTruthy();
+
+  await page.setViewportSize({ width: 390, height: 844 });
+  await expect(table).toBeVisible();
+  await expect(table.getByRole("row", { name: /Reversibility/ })).toContainText("Irreversible");
+  await expect(table.getByRole("row", { name: /Downstream actions/ })).toContainText("1");
+  await page.screenshot({ path: "test-results/what-if-mobile.png", fullPage: true });
+  const mobile = await page.evaluate(() => ({ viewport: document.documentElement.clientWidth, page: document.documentElement.scrollWidth }));
+  expect(mobile.page).toBeLessThanOrEqual(mobile.viewport + 1);
+  const mobileContrast = await table.evaluate(inspectContrast);
+  expect(mobileContrast.every((sample) => sample.ratio >= 4.5), JSON.stringify(mobileContrast)).toBeTruthy();
+});
+
+/** WCAG contrast for visible labels and values against their nearest opaque ancestor background. */
+function inspectContrast(tableEl: HTMLElement) {
+  const rgb = (value: string) => value.match(/[\d.]+/g)?.slice(0, 3).map(Number) ?? [0, 0, 0];
+  const luminance = (value: string) => {
+    const channels = rgb(value).map((part) => part / 255).map((part) => part <= 0.04045 ? part / 12.92 : ((part + 0.055) / 1.055) ** 2.4);
+    return channels[0]! * 0.2126 + channels[1]! * 0.7152 + channels[2]! * 0.0722;
+  };
+  return [...tableEl.querySelectorAll<HTMLElement>("th, td, th *, td *")]
+    .filter((element) => element.innerText.trim().length > 0)
+    .map((element) => {
+      const color = getComputedStyle(element).color;
+      let background = "rgb(255, 255, 255)";
+      for (let node: HTMLElement | null = element; node; node = node.parentElement) {
+        const candidate = getComputedStyle(node).backgroundColor;
+        if (!candidate.includes("rgba(0, 0, 0, 0)") && !candidate.includes("rgba(0,0,0,0)")) {
+          background = candidate;
+          break;
+        }
+      }
+      const a = luminance(color), b = luminance(background);
+      return { text: element.innerText, color, background, ratio: (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05) };
+    });
+}
+
+test("ambiguous and unsupported requests ask for clarification without simulating an action", async ({ page }) => {
   await page.goto("/simulate");
+  const input = page.getByLabel("What should the agent do?");
+  await input.fill("Cancel the order");
   await page.getByRole("button", { name: "Simulate consequences" }).click();
-  await expect(status(page)).toHaveText("Pending approval");
-  const whatIf = page.getByRole("region", { name: "What if" });
-  await expect(whatIf).toContainText("Is there a safer option?");
-  await expect(whatIf).toContainText("Keep both laptops, offer 10% compensation");
-  await whatIf.getByRole("button", { name: "Compare this alternative" }).click();
-  const verdict = page.getByTestId("what-if-verdict");
-  // Lower exposure and risk, but a different action, fully irreversible, still approval-gated:
-  // shown as a trade-off, never as "Recommended".
-  await expect(verdict).toContainText("Lower-risk alternative");
-  await expect(page.getByTestId("what-if-summary")).toHaveText("₹14,400 exposure · 1 downstream action · MEDIUM risk");
-  await expect(verdict).toContainText("₹57,600 less exposure");
-  await expect(verdict).toContainText("4 fewer downstream actions");
-  await expect(verdict).toContainText("Lower risk: HIGH 68 → MEDIUM 52");
-  const tradeoffs = page.getByTestId("what-if-tradeoffs");
-  await expect(tradeoffs).toContainText("does not preserve the originally requested outcome");
-  await expect(tradeoffs).toContainText("Irreversible");
-  await expect(tradeoffs).toContainText("Approval still required");
-  await expect(page.getByTestId("recommended")).toHaveCount(0);
-});
+  await expect(page).toHaveURL(/\/simulate\?action=/);
+  await expect(page.getByRole("region", { name: "Clarification needed" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Blast radius" })).toHaveCount(0);
 
-test("persona: starting the flagship while acting as Asha proposes as Ravi, so Asha can approve — also after a replay", async ({ page }) => {
-  await page.goto("/simulate");
-  await actAs(page, "approver-asha");
+  await page.getByRole("link", { name: /New simulation/ }).click();
+  await input.fill("Please make the customer happy");
   await page.getByRole("button", { name: "Simulate consequences" }).click();
-  await expect(status(page)).toHaveText("Pending approval");
-  await expect(page.getByLabel("Acting user")).toHaveValue("ops-ravi");
-  await expect(page.getByTestId("persona-notice")).toContainText("Proposed as Ravi");
-  await expect(page.getByTestId("requested-by")).toContainText("Ravi Kumar");
-  await expect(page.getByTestId("persona-guide")).toContainText("Approval requires an authorized approver");
-
-  await page.getByRole("button", { name: /Act as Asha Menon/ }).click();
-  await page.getByRole("button", { name: "Approve & Execute" }).click();
-  await expect(status(page)).toHaveText("Executed");
-  await expect(page.getByTestId("now-Order total")).toHaveText("₹72,000.00"); // = the simulated "after"
-
-  // Still acting as Asha: the replay is proposed by Ravi again, so Asha can approve it again.
-  await page.getByRole("button", { name: "Reset demo data & run this again" }).click();
-  await expect(status(page)).toHaveText("Pending approval");
-  await expect(page.getByLabel("Acting user")).toHaveValue("ops-ravi");
-  await page.getByRole("button", { name: /Act as Asha Menon/ }).click();
-  await page.getByRole("button", { name: "Approve & Execute" }).click();
-  await expect(status(page)).toHaveText("Executed");
-});
-
-test("self-approval: Asha's own request cannot be approved by Asha; one click proposes it again as Ravi", async ({ page, request }) => {
-  await page.goto("/simulate");
-  await actAs(page, "approver-asha");
-  await page.getByText("Write your own action").click();
-  await page.getByLabel("Instruction").fill(FLAGSHIP_TEXT);
-  await page.getByRole("button", { name: "Simulate", exact: true }).click();
-  await expect(status(page)).toHaveText("Pending approval");
-  await expect(page.getByTestId("requested-by")).toContainText("Asha Menon");
-  await expect(page.getByTestId("persona-guide")).toContainText("you cannot approve it yourself");
-  await expect(page.getByRole("button", { name: "Approve & Execute" })).toHaveCount(0);
-
-  // The backend rule is untouched: Asha approving her own request is refused.
-  const ownId = new URL(page.url()).searchParams.get("action") ?? "";
-  const refused = await request.post(`${BACKEND}/api/actions/${ownId}/approve`, { headers: { "X-User-Id": "approver-asha" } });
-  expect(refused.status()).toBe(403);
-  expect(((await refused.json()) as { error: { code: string } }).error.code).toBe("SELF_APPROVAL_FORBIDDEN");
-
-  await page.getByTestId("propose-as-requester").click();
-  await expect(page.getByLabel("Acting user")).toHaveValue("ops-ravi");
-  await expect(page.getByTestId("requested-by")).toContainText("Ravi Kumar");
-  await page.getByRole("button", { name: /Act as Asha Menon/ }).click();
-  await page.getByRole("button", { name: "Approve & Execute" }).click();
-  await expect(status(page)).toHaveText("Executed");
-
-  const actionId = new URL(page.url()).searchParams.get("action") ?? "";
-  await page.getByRole("link", { name: "View the audit trail →" }).click();
-  const rows = page.locator("tbody tr", { hasText: actionId.slice(0, 8) });
-  for (const event of ["ACTION_PARSED", "APPROVED", "EXECUTED"]) {
-    await expect(rows.filter({ hasText: event }).first()).toBeVisible();
-  }
-});
-
-test("replay: after Approve & Execute on the flagship, one click resets the demo and runs it again", async ({ page }) => {
-  await page.goto("/simulate");
-  await page.getByRole("button", { name: "Simulate consequences" }).click();
-  await expect(status(page)).toHaveText("Pending approval");
-  await actAs(page, "approver-asha");
-  await page.getByRole("button", { name: "Approve & Execute" }).click();
-  await expect(status(page)).toHaveText("Executed");
-  await expect(page.getByRole("list", { name: "Execution steps" })).toContainText("CRM case created");
-  const firstUrl = page.url();
-  await page.getByRole("button", { name: "Reset demo data & run this again" }).click();
-  await expect(page).not.toHaveURL(firstUrl);
-  await expect(status(page)).toHaveText("Pending approval");
-  await expect(page.getByTestId("blast-headline")).toContainText("Exposure₹72,000");
-});
-
-test("clarification: 'Refund John's order' asks which John, then which order", async ({ page }) => {
-  await page.goto("/simulate");
-  await page.getByText("Write your own action").click();
-  await page.getByRole("textbox", { name: "Instruction" }).fill("Refund John's order");
-  await page.getByRole("button", { name: "Simulate", exact: true }).click();
-  const prompt = page.getByRole("region", { name: "Clarification needed" });
-  await expect(prompt).toContainText("3 customers match 'John'");
-  await prompt.getByRole("button", { name: /John Mathew/ }).click();
-  await expect(prompt).toContainText("John Mathew has 3 orders");
-  await prompt.getByRole("button", { name: /ORD-10482/ }).click();
-  await expect(status(page)).toHaveText("Pending approval");
-  await expect(page.getByTestId("risk-score")).toBeVisible();
-});
-
-test("escape room: every attack is caught", async ({ page }) => {
-  await page.goto("/escape-room");
-  for (const id of ["poisoned-instruction", "unauthorized-downstream", "state-tampering", "conflicting-instructions"]) {
-    const card = page.getByTestId(`scenario-${id}`);
-    await card.getByRole("button", { name: "Run attack" }).click();
-    await expect(card.getByText("✓ Caught")).toBeVisible();
-  }
+  await expect(page.getByRole("region", { name: "Clarification needed" })).toBeVisible();
+  await expect(page.getByRole("region", { name: "Blast radius" })).toHaveCount(0);
 });

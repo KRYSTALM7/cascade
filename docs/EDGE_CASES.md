@@ -140,7 +140,7 @@ Status (Phase 9 sweep): every row is ✅ except LLM-08, which is ⏭ opt-in by d
 | RISK-10 | Invalid policy (weights ≠ 1, float money, unordered levels, breakpoints not from 0, incomplete enum map, unknown key, missing file) | Refused with `PolicyError`; the app refuses to start | ✅ `…::test_invalid_policy_is_refused`, `…::test_missing_policy_file_is_refused`, `api/test_policy_api::test_app_refuses_to_start_with_an_invalid_policy` |
 | RISK-11 | `GET /api/policy` | Active thresholds, money/weights as exact strings | ✅ `api/test_policy_api::test_policy_endpoint_serves_exact_decimal_strings` |
 | RISK-12 | Approver rules (domain) | role APPROVER; limit ≥ outflow (equal is enough); never the proposer | ✅ `unit/test_policy_risk::test_approver_rules` (API: APR-05..07) |
-| RISK-13 | Medium scenario (ORD-10495) under the specified weights | Raw 34 → LOW → `AUTO_APPROVED` (one point below MEDIUM; policy left as specified — see PROGRESS "decisions for the maintainer") | ✅ `unit/test_policy_risk::test_medium_scenario_scores_from_the_formula` |
+| RISK-13 | Medium scenario (ORD-10495) under the specified weights | Raw 34 → LOW → `AUTO_APPROVED` (one point below MEDIUM; policy left as specified) | ✅ `unit/test_policy_risk::test_medium_scenario_scores_from_the_formula` |
 
 ## APR — approval (Phase 6)
 

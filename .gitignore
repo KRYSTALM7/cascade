@@ -13,3 +13,7 @@ node_modules/
 dist/
 .DS_Store
 .claude/
+# Internal documentation (not for public repo)
+CLAUDE.md
+docs/PROGRESS.md
+docs/API_KEY_ROTATION.md

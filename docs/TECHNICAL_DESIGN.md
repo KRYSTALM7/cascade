@@ -4,7 +4,7 @@ This document is for engineers who will review, extend or operate Cascade. It de
 
 **How claims are labelled.** Statements about behaviour come from the source code and tests. Rationale is labelled by where it comes from:
 
-- *Documented*: stated in `BLUEPRINT.md`, `PROGRESS.md`, `EDGE_CASES.md` or a code docstring or comment. The source is cited.
+- *Documented*: stated in `BLUEPRINT.md`, `EDGE_CASES.md` or a code docstring or comment. The source is cited.
 - *Architectural rationale inferred from the implementation*: my reading of why the code is shaped the way it is. No historical discussion is implied.
 - *Architectural analysis*: comparison with alternatives that the repository does not record as having been evaluated.
 - *Future work*: does not exist today.
@@ -493,11 +493,11 @@ Worked hero example (RISK-01): F = 70 + (84,500 − 25,000)/75,000 × 30 = 93.8,
 
 `approver_error(...)` holds the approver rules: role APPROVER (`APPROVER_NOT_AUTHORIZED`), not the proposer (`SELF_APPROVAL_FORBIDDEN`), and limit ≥ money out (`APPROVAL_LIMIT_EXCEEDED`).
 
-Interpretations recorded in PROGRESS (Phase 4), *documented*:
+Interpretations made during implementation:
 
 - "Irreversible effects" means the *whole* cascade's aggregate reversibility is NONE. Reading it as "any irreversible step" would force approval on the ₹1,998 auto-approve scenario.
-- "PII exposure to a new channel" is not modelled, because there is no contact history. The proxy is BULK_PII.
-- The "Medium" demo scenario (ORD-10495) scores 34, which is LOW, under the specified weights, and is auto-approved. The policy was left unchanged as an open maintainer decision (RISK-13).
+- "PII exposure to a new channel" is not modelled, because there is no contact history. The proxy is BULK_PII. (*Inferred*)
+- The "Medium" demo scenario (ORD-10495) scores 34, which is LOW, under the specified weights, and is auto-approved. The policy was left unchanged as an open maintainer decision (RISK-13). (*Inferred*)
 
 ## 17. LLM Architecture
 
@@ -894,7 +894,7 @@ Current gate (PROGRESS, final sprint): **343 backend tests passed** (+1 opt-in l
 | Frontend | `frontend/src/**/*.test.ts(x)` | Vitest + Testing Library against **fixtures captured from the real API** (`src/test/fixtures/`): graph rendering, blocked styling, layout fit, risk panel, decision bar, clarification, money formatting |
 | E2E | `frontend/e2e/demo.spec.ts` | Playwright against the real backend (rules provider), resetting the demo DB per test: hero, low-limit approver, unauthorized, auto-approve, what-if, clarification, Escape Room |
 
-Rules from `CLAUDE.md`: warnings are errors (`error::DeprecationWarning:app.*`, `error::SAWarning`). Tests are never skipped, xfailed or deleted to get green. `REQUIRE_DB=1` turns database-test skips into failures. The normal suite never calls Gemini. The `live` marker opts in with `GEMINI_API_KEY`.
+Testing rules: warnings are errors (`error::DeprecationWarning:app.*`, `error::SAWarning`). Tests are never skipped, xfailed or deleted to get green. `REQUIRE_DB=1` turns database-test skips into failures. The normal suite never calls Gemini. The `live` marker opts in with `GEMINI_API_KEY`.
 
 **Determinism tests**: GRAPH-11 (same input, byte-identical report) and ENG-04 (DB-loaded world and in-memory seed world give identical reports for every demo scenario).
 
@@ -951,7 +951,7 @@ All entries below are *architectural analysis* unless a source is cited.
 | Tool parameter schemas in the database | Kept in code (Pydantic, beside each simulator) as the single source of truth | BLUEPRINT rev 2, change 5 |
 | Separate tables for consequence nodes and edges | JSONB snapshot instead | BLUEPRINT §C |
 | Graph database (Neo4j) | Not used; listed post-MVP "only if graphs reach thousands of nodes" | BLUEPRINT §A, §K |
-| Queues and microservices | Explicitly excluded | BLUEPRINT §A, `CLAUDE.md` |
+| Queues and microservices | Explicitly excluded | BLUEPRINT §A |
 | Rejecting non-permitted tools at parse time | Rejected: the action is created and engine-blocked, so the attempt is audited | PROGRESS, Phase 5 |
 | "Irreversible effects" meaning any irreversible step | Rejected in favour of whole-cascade NONE (would contradict the auto-approve scenario) | PROGRESS, Phase 4 |
 | SDK-level retries for Gemini | Disabled; the adapter retries once, only on transient errors | PROGRESS, Phase 5; `gemini.py` |
@@ -995,7 +995,7 @@ Each decision lists its source. "Inferred" means *architectural rationale inferr
 #### Decision
 One FastAPI backend, one React SPA, one PostgreSQL database. No queues, microservices or extra services.
 #### Why
-Documented in BLUEPRINT §A and `CLAUDE.md`. Inferred: atomic execution (locks, re-simulation and savepoints in one transaction) is straightforward only within one process and one database.
+Documented in BLUEPRINT §A. Inferred: atomic execution (locks, re-simulation and savepoints in one transaction) is straightforward only within one process and one database.
 #### Consequence
 Simple deployment (two containers plus a database) and true ACID execution. Layering is enforced by tests rather than process boundaries.
 #### Alternative considered
@@ -1061,7 +1061,7 @@ Tool → tool `tool_dependencies` (replaced in rev 2).
 #### Decision
 All thresholds, weights, limits and approval triggers live in `policy.yaml`, validated into a Pydantic model at startup.
 #### Why
-Documented in `CLAUDE.md` ("never hardcoded"), BLUEPRINT §G.2, and the policy file header.
+Documented in BLUEPRINT §G.2 and the policy file header.
 #### Consequence
 Policy changes are reviewable diffs. An invalid policy prevents startup. Changes need a restart.
 #### Alternative considered
@@ -1072,7 +1072,7 @@ Architectural analysis only: database-stored policy with a runtime editor (post-
 #### Decision
 `Decimal` with `ROUND_HALF_UP` to the paisa in Python, `NUMERIC(12,2)` in the database, strings in the API and in LLM schemas, BigInt paise in the UI.
 #### Why
-Documented in `CLAUDE.md`, BLUEPRINT §C and §L ("Float rounding on money"), and `domain/money.py` ("Floats never touch money").
+Documented in BLUEPRINT §C and §L ("Float rounding on money"), and `domain/money.py` ("Floats never touch money").
 #### Consequence
 Exact boundary behaviour (REF-04..06, REF-10). The policy loader refuses float money.
 #### Alternative considered
@@ -1094,7 +1094,7 @@ Architectural analysis only: LLM-judged risk, excluded by the rule that the LLM 
 #### Decision
 The LLM parses and narrates only. Identity comes from the request. Output is schema-validated and re-validated by the backend, and narratives are numerically guarded.
 #### Why
-Documented in BLUEPRINT §A rules 3 and 4, §I, and `CLAUDE.md`.
+Documented in BLUEPRINT §A rules 3 and 4, §I.
 #### Consequence
 Prompt injection can at most produce an intent that the engine blocks (ESC-01). LLM outages never block the structured path.
 #### Alternative considered
@@ -1105,7 +1105,7 @@ Not recorded.
 #### Decision
 `LLM_PROVIDER=rules` is the default and is used by all tests and E2E flows.
 #### Why
-Documented in BLUEPRINT §I ("fully offline, deterministic provider used by all unit/API/E2E tests and as a demo safety net") and `CLAUDE.md` (no live Gemini calls in the normal suite).
+Documented in BLUEPRINT §I ("fully offline, deterministic provider used by all unit/API/E2E tests and as a demo safety net"). The normal suite never calls Gemini.
 #### Consequence
 Reproducible tests and an offline demo. Natural-language coverage is limited to its patterns.
 #### Alternative considered

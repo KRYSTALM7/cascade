@@ -635,12 +635,10 @@ Test totals depend on the checked-out revision and configured test database. Pos
 │   └── uv.lock               # Locked Python dependencies
 ├── docs/
 │   ├── assets/               # Logo and demo images
-│   ├── API_KEY_ROTATION.md   # Gemini key rotation notes
 │   ├── BLUEPRINT.md          # Engineering blueprint
 │   ├── DEMO_SCRIPT.md        # Judge walkthrough
 │   ├── DEPLOY.md             # Google Cloud deployment guide
 │   ├── EDGE_CASES.md         # Edge-case checks
-│   ├── PROGRESS.md           # Historical project/test progress
 │   └── TECHNICAL_DESIGN.md   # Detailed system design
 ├── frontend/
 │   ├── public/               # Logo and existing artwork
@@ -674,8 +672,6 @@ Test totals depend on the checked-out revision and configured test database. Pos
 | [`docs/EDGE_CASES.md`](docs/EDGE_CASES.md) | Edge-case matrix and expected behaviors |
 | [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | Judge-facing walkthrough |
 | [`docs/DEPLOY.md`](docs/DEPLOY.md) | Cloud Run deployment with Cloud SQL, Artifact Registry, and Secret Manager |
-| [`docs/API_KEY_ROTATION.md`](docs/API_KEY_ROTATION.md) | Optional Gemini API key rotation notes |
-| [`docs/PROGRESS.md`](docs/PROGRESS.md) | Historical build log and validation gates |
 
 ## Team
 
@@ -683,6 +679,10 @@ Test totals depend on the checked-out revision and configured test database. Pos
 |---|---|---|
 | **Sujan Kumar** | Product engineering, Cascade engine, and Mercora integration | [![GitHub KRYSTALM7](https://img.shields.io/badge/GitHub-KRYSTALM7-181717?style=for-the-badge&logo=github)](https://github.com/KRYSTALM7) [![Google Developers CR1TIC4L](https://img.shields.io/badge/Google_Developers-CR1TIC4L-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://g.dev/CR1TIC4L) |
 | **Ipshita** | Planning, system design, workflow, and architecture | [![GitHub ipjrb12](https://img.shields.io/badge/GitHub-ipjrb12-181717?style=for-the-badge&logo=github)](https://github.com/ipjrb12) [![Google Developers ipshita12gdg](https://img.shields.io/badge/Google_Developers-ipshita12gdg-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://me.developers.google.com/u/ipshita12gdg) |
+
+## License
+
+MIT. See [LICENSE](LICENSE).
 
 <p align="center">
   <img src="docs/assets/logo.png" alt="Cascade logo" width="100" />

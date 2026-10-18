@@ -68,8 +68,6 @@ The result is an explainable consequence graph, a deterministic risk assessment,
 
 **Seeded demo scope:** 5 agents · 14 tools · 15 reaction rules.
 
-[Back to top](#cascade)
-
 ## What Makes It Different
 
 | Capability | Description |
@@ -95,8 +93,6 @@ The result is an explainable consequence graph, a deterministic risk assessment,
 
 </details>
 
-[Back to top](#cascade)
-
 ## The Hidden Cascade
 
 The seeded NovaCart scenario starts with a simple request: **reduce the laptop quantity from two to one on `ORD-10550`**. Support is allowed to modify the order. That edit emits `ORDER_MODIFIED`; the Finance agent independently proposes a ₹72,000 refund under its own `finance.refund_on_downsize` reaction rule. The refund then triggers CRM actions. The permitted root action is reversible; the full consequence graph includes irreversible money movement and customer effects.
@@ -112,10 +108,7 @@ The seeded NovaCart scenario starts with a simple request: **reduce the laptop q
 
 Nobody requested the refund. Finance proposes it after seeing the order total decrease. Cascade displays the original call as the direct action and the later calls as agent-triggered nodes, with the reaction rule behind each edge. If Finance lacks refund permission, the same flow is blocked at the Finance node.
 
-<p align="center"><img src="docs/assets/banner.png" alt="Cascade previews downstream agent consequences" width="760"></p>
 <p align="center"><em>A permitted order edit can trigger downstream finance, CRM, and inventory actions.</em></p>
-
-[Back to top](#cascade)
 
 ## Demo
 
@@ -139,8 +132,6 @@ The public deployment disables FastAPI's interactive API documentation.
 | Kim Lee (`viewer-kim`) | Viewer · Auditor | — |
 
 Demo identity is selected through the app’s demo identity mechanism; it is **not production authentication**. Do not use demo mode with real business data. A production-mode deployment restricts shared-state reset and Escape Room operations by default.
-
-[Back to top](#cascade)
 
 ## Architecture
 
@@ -210,8 +201,6 @@ Alembic has three revisions: baseline, domain model, and action explanation/repo
 
 **Reading the diagram:** the browser submits a proposed action to FastAPI. Services invoke the deterministic domain, which simulates the root tool and traverses the consequence graph from declared reaction rules. The policy engine computes risk and the decision. Only after approval where required does execution lock rows, re-simulate, compare fingerprints, and apply the verified changes. Gemini is an optional input and explanation aid. The app is a modular monolith; there is no queue, microservice mesh, or graph database.
 
-[Back to top](#cascade)
-
 ## Google Cloud and Gemini Implementation
 
 ### Gemini Usage
@@ -241,8 +230,6 @@ Firebase Hosting, Vertex AI, Firestore, Pub/Sub, ADK, and Terraform are not part
 - FastAPI and Pydantic 2 implement typed HTTP endpoints and validation.
 - SQLAlchemy 2, psycopg 3, and Alembic implement PostgreSQL persistence and schema migrations.
 - NetworkX computes execution ordering and graph measures over the completed consequence report. The BFS event/reaction traversal is Cascade code.
-
-[Back to top](#cascade)
 
 ## The Consequence Pipeline
 
@@ -366,8 +353,6 @@ VII. Lock, re-simulate, compare, execute, audit
 
 </details>
 
-[Back to top](#cascade)
-
 ## A Decision Through Cascade
 
 The NovaCart hero cancellation starts with `ORD-10482`, a ₹84,500 VIP order with a captured payment. The support agent proposes `cancel_order`. The action emits `ORDER_CANCELLED`; Finance, Inventory, and CRM reaction rules propose downstream actions. A Finance refund emits `REFUND_ISSUED`, which can trigger CRM notifications and a case.
@@ -418,8 +403,6 @@ On execution, Cascade locks the action and read rows, re-simulates, and compares
 
 <p align="center"><em>A changed state or configuration requires a fresh simulation.</em></p>
 
-[Back to top](#cascade)
-
 ## Determinism and Safety
 
 The LLM is an input device and optional narrator. It is outside the authoritative simulation and policy path.
@@ -433,8 +416,6 @@ The LLM is an input device and optional narrator. It is outside the authoritativ
 **The boundary:** model output must match a strict schema, use an allowed tool, and pass backend parameter and entity validation. The acting agent always comes from the request. Gemini requests use temperature zero and JSON schema; invalid output is not retried. Explanation figures must match computed facts or the whole narrative is replaced with a deterministic template. Prompt-injection heuristics are audit signals, not the security boundary.
 
 **Demo authentication is not production authentication.** The seeded `X-User-Id` identities exist for judging the role and approval flows. They are not user authentication and must not be used with real customer or business data. In production mode, public-mode defaults restrict database reset, Escape Room runs, and API documentation. See [`docs/DEPLOY.md`](docs/DEPLOY.md) before publishing a deployment.
-
-[Back to top](#cascade)
 
 ## What-If Analysis, Human Approval, and Security
 
@@ -470,8 +451,6 @@ From a simulated cancellation, ask: **“What if we give 20% compensation instea
 - Execution uses locks, re-simulation, fingerprints, and transactional savepoints.
 - API errors use a structured envelope and request IDs; unexpected error details are not returned to clients.
 
-[Back to top](#cascade)
-
 ## Ecosystem: Mercora
 
 [Mercora](https://github.com/KRYSTALM7/Mercora) is an e-commerce operations app with a Cascade integration for refund consequence simulation. The [live Mercora dashboard](https://demo-polish-web---mercora-web-gp5ciyqy6a-el.a.run.app/dashboard) sends a scoped simulation request to Cascade and displays the returned blast radius, risk assessment, and policy decision. Simulation is read-only: it does not modify the order or issue the refund. Mercora’s direct refund endpoint is disabled and returns **410 Gone**, enforcing the simulate-before-act workflow.
@@ -494,8 +473,6 @@ sequenceDiagram
   <a href="https://github.com/KRYSTALM7/Mercora">Mercora repository</a>
 </p>
 
-[Back to top](#cascade)
-
 ## Tech Stack
 
 | Area | Technology | Role |
@@ -510,8 +487,6 @@ sequenceDiagram
 | Data fetching / styling | TanStack Query, Tailwind CSS 4 | API state and UI styling |
 | Testing | pytest, Vitest, Playwright | Backend, component, and browser-flow coverage |
 | Runtime | Docker Compose; Cloud Run deployment documented | Local stack and optional Google Cloud hosting |
-
-[Back to top](#cascade)
 
 ## Getting Started
 
@@ -592,8 +567,6 @@ Settings are read by `backend/app/core/config.py`. Use variable names and descri
 
 The checked-in `.env.example` is the local template. `.env` is ignored. Never paste real keys, database URLs, or tokens into this README or commit them.
 
-[Back to top](#cascade)
-
 ## Reproducible Testing
 
 ### Quick Test (Under 5 Minutes)
@@ -631,8 +604,6 @@ The checked-in `.env.example` is the local template. `.env` is ignored. Never pa
 | Full gate | `make check` | Lint, types, tests, and frontend build |
 
 Test totals depend on the checked-out revision and configured test database. PostgreSQL integration tests need `TEST_DATABASE_URL`; the opt-in live Gemini test can call the Gemini API; and `make e2e` resets its configured demo database. Use a disposable database for any test that writes or resets data.
-
-[Back to top](#cascade)
 
 ## Repository Layout
 
@@ -691,8 +662,6 @@ Test totals depend on the checked-out revision and configured test database. Pos
 
 </details>
 
-[Back to top](#cascade)
-
 ## Documentation
 
 | Document | Contents |
@@ -705,16 +674,12 @@ Test totals depend on the checked-out revision and configured test database. Pos
 | [`docs/API_KEY_ROTATION.md`](docs/API_KEY_ROTATION.md) | Optional Gemini API key rotation notes |
 | [`docs/PROGRESS.md`](docs/PROGRESS.md) | Historical build log and validation gates |
 
-[Back to top](#cascade)
-
 ## Team
 
 | Team member | Focus | Profiles |
 |---|---|---|
 | **Sujan Kumar** | Product engineering, Cascade engine, and Mercora integration | [![GitHub KRYSTALM7](https://img.shields.io/badge/GitHub-KRYSTALM7-181717?style=for-the-badge&logo=github)](https://github.com/KRYSTALM7) [![Google Developers CR1TIC4L](https://img.shields.io/badge/Google_Developers-CR1TIC4L-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://g.dev/CR1TIC4L) |
-| **Ipshita (@ipjrb12)** | Planning, system design, workflow, and architecture | [![GitHub ipjrb12](https://img.shields.io/badge/GitHub-ipjrb12-181717?style=for-the-badge&logo=github)](https://github.com/ipjrb12) [![Google Developers ipshita12gdg](https://img.shields.io/badge/Google_Developers-ipshita12gdg-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://me.developers.google.com/u/ipshita12gdg) |
-
-[Back to top](#cascade)
+| **Ipshita** | Planning, system design, workflow, and architecture | [![GitHub ipjrb12](https://img.shields.io/badge/GitHub-ipjrb12-181717?style=for-the-badge&logo=github)](https://github.com/ipjrb12) [![Google Developers ipshita12gdg](https://img.shields.io/badge/Google_Developers-ipshita12gdg-4285F4?style=for-the-badge&logo=google&logoColor=white)](https://me.developers.google.com/u/ipshita12gdg) |
 
 <p align="center">
   <img src="docs/assets/logo.png" alt="Cascade logo" width="100" />

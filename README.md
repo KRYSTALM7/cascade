@@ -114,7 +114,7 @@ Nobody requested the refund. Finance proposes it after seeing the order total de
 
 ### Demo Video
 
-▶ **[Watch the demo video](https://drive.google.com/file/d/1sN-F9TT0Ke0mTdZJRb-CoeltACRN_oip/view?usp=sharing)** (about 3 minutes, following docs/DEMO_SCRIPT.md)
+▶ **[Watch the demo video](https://drive.google.com/file/d/1sN-F9TT0Ke0mTdZJRb-CoeltACRN_oip/view?usp=sharing)**
 
 ### Live Deployment
 

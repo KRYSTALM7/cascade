@@ -636,7 +636,6 @@ Test totals depend on the checked-out revision and configured test database. Pos
 ├── docs/
 │   ├── assets/               # Logo and demo images
 │   ├── BLUEPRINT.md          # Engineering blueprint
-│   ├── DEMO_SCRIPT.md        # Judge walkthrough
 │   ├── DEPLOY.md             # Google Cloud deployment guide
 │   ├── EDGE_CASES.md         # Edge-case checks
 │   └── TECHNICAL_DESIGN.md   # Detailed system design
@@ -670,7 +669,6 @@ Test totals depend on the checked-out revision and configured test database. Pos
 | [`docs/TECHNICAL_DESIGN.md`](docs/TECHNICAL_DESIGN.md) | Architecture, trust boundaries, execution safety, concurrency, and design trade-offs |
 | [`docs/BLUEPRINT.md`](docs/BLUEPRINT.md) | Engineering blueprint |
 | [`docs/EDGE_CASES.md`](docs/EDGE_CASES.md) | Edge-case matrix and expected behaviors |
-| [`docs/DEMO_SCRIPT.md`](docs/DEMO_SCRIPT.md) | Judge-facing walkthrough |
 | [`docs/DEPLOY.md`](docs/DEPLOY.md) | Cloud Run deployment with Cloud SQL, Artifact Registry, and Secret Manager |
 
 ## Team

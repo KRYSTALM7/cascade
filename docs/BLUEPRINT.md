@@ -60,7 +60,6 @@ cascade/
 ├── docs/
 │   ├── BLUEPRINT.md              # this file
 │   ├── EDGE_CASES.md             # (Phase 9) full matrix, each row → test id
-│   └── DEMO_SCRIPT.md            # (Phase 10)
 ├── backend/
 │   ├── Dockerfile                # Cloud Run-ready ($PORT)
 │   ├── pyproject.toml            # deps + ruff + mypy + pytest config
@@ -395,7 +394,7 @@ Every phase adds its rows to `docs/EDGE_CASES.md` with test ids; a phase is done
 | 8–9 | Oct 12–13 | **7** Frontend: simulate screen, graph, Blast Radius panel, approve/reject, what-if, audit | component tests, 10-second readability pass |
 | 10 | Oct 14 | **8** Execution hardening + **Escape Room** pack (§M) | concurrency, partial execution, 4 scenarios green |
 | 11 | Oct 15 | **9** Playwright E2E + edge-case sweep | every matrix row has a passing test |
-| 12 | Oct 16 | **10** Deploy prep, README, demo script — **feature freeze** | clean-clone `make up` works |
+| 12 | Oct 16 | **10** Deploy prep, README — **feature freeze** | clean-clone `make up` works |
 | 13–14 | Oct 17–18 | Buffer, rehearsal, video | — |
 
 ---
